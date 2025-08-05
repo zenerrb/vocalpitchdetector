@@ -109,7 +109,7 @@
     const freqElem = document.getElementById('freq');
     const startBtn = document.getElementById('start');
     const pianoElem = document.getElementById('piano');
-    let audioContext, analyser, dataArray, source;
+    let audioContext, analyser, dataArray, source, stream, listening = false, animationId;
 
     // Piano keys from C2 to C6
     const pianoNotes = [];
@@ -252,24 +252,47 @@
     }
 
     startBtn.onclick = async () => {
-      startBtn.disabled = true;
-      audioContext = new (window.AudioContext || window.webkitAudioContext)();
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      source = audioContext.createMediaStreamSource(stream);
-      analyser = audioContext.createAnalyser();
-      analyser.fftSize = 2048;
-      dataArray = new Float32Array(analyser.fftSize);
-      source.connect(analyser);
-      function update() {
-        analyser.getFloatTimeDomainData(dataArray);
-        const freq = autoCorrelate(dataArray, audioContext.sampleRate);
-        freqElem.textContent = 'Frequency: ' + (freq ? freq.toFixed(2) : '--') + ' Hz';
-        const noteName = freqToNote(freq);
-        noteElem.textContent = 'Note: ' + noteName;
-        highlightPiano(noteName);
-        requestAnimationFrame(update);
+      if (!listening) {
+        // Start listening
+        listening = true;
+        startBtn.textContent = 'Stop Listening';
+        startBtn.disabled = true;
+        audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        source = audioContext.createMediaStreamSource(stream);
+        analyser = audioContext.createAnalyser();
+        analyser.fftSize = 2048;
+        dataArray = new Float32Array(analyser.fftSize);
+        source.connect(analyser);
+        startBtn.disabled = false;
+        function update() {
+          if (!listening) return;
+          analyser.getFloatTimeDomainData(dataArray);
+          const freq = autoCorrelate(dataArray, audioContext.sampleRate);
+          freqElem.textContent = 'Frequency: ' + (freq ? freq.toFixed(2) : '--') + ' Hz';
+          const noteName = freqToNote(freq);
+          noteElem.textContent = 'Note: ' + noteName;
+          highlightPiano(noteName);
+          animationId = requestAnimationFrame(update);
+        }
+        update();
+      } else {
+        // Stop listening
+        listening = false;
+        startBtn.textContent = 'Start Listening';
+        if (animationId) cancelAnimationFrame(animationId);
+        if (audioContext) {
+          audioContext.close();
+          audioContext = null;
+        }
+        if (stream) {
+          stream.getTracks().forEach(track => track.stop());
+          stream = null;
+        }
+        freqElem.textContent = 'Frequency: -- Hz';
+        noteElem.textContent = 'Note: --';
+        highlightPiano('--');
       }
-      update();
     };
   </script>
 </body>
