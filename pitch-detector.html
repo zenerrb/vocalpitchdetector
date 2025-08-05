@@ -4,10 +4,74 @@
   <meta charset="UTF-8">
   <title>Real-Time Pitch Detector</title>
   <style>
+    .white-key {
+      position: relative;
+      display: inline-block;
+      width: 40px;
+      height: 120px;
+      background: #fff;
+      border: 1px solid #888;
+      box-sizing: border-box;
+      border-radius: 0 0 10px 10px;
+      vertical-align: bottom;
+      cursor: pointer;
+      transition: background 0.2s;
+      z-index: 1;
+    }
+    .black-key {
+      position: absolute;
+      left: 80%;
+      top: 0;
+      transform: translateX(-50%);
+      width: 24px;
+      height: 70px;
+      background: #222;
+      border: 1px solid #888;
+      box-sizing: border-box;
+      border-radius: 0 0 6px 6px;
+      vertical-align: bottom;
+      cursor: pointer;
+      transition: background 0.2s;
+      z-index: 10;
+    }
     body { font-family: Arial, sans-serif; text-align: center; margin-top: 50px; }
     #note { font-size: 2em; margin-top: 20px; }
     #freq { font-size: 1.2em; color: #555; }
     button { padding: 10px 20px; font-size: 1em; }
+    #piano {
+      position: relative;
+      display: inline-block;
+      margin: 40px 0;
+      height: 120px;
+      min-width: 960px;
+    }
+    .white-key {
+      position: relative;
+      display: inline-block;
+      width: 40px;
+      height: 120px;
+      background: #fff;
+      border: 1px solid #888;
+      box-sizing: border-box;
+      border-radius: 0 0 10px 10px;
+      vertical-align: bottom;
+      cursor: pointer;
+      transition: background 0.2s;
+      z-index: 1;
+    }
+    .black-key {
+      position: absolute;
+      width: 24px;
+      height: 70px;
+      background: #222;
+      border: 1px solid #888;
+      box-sizing: border-box;
+      border-radius: 0 0 6px 6px;
+      vertical-align: bottom;
+      cursor: pointer;
+      transition: background 0.2s;
+      z-index: 2;
+    }
   </style>
 </head>
 <body>
@@ -15,11 +79,73 @@
   <button id="start">Start Listening</button>
   <div id="note">Note: --</div>
   <div id="freq">Frequency: -- Hz</div>
+  <div id="piano"></div>
   <script>
     const noteElem = document.getElementById('note');
     const freqElem = document.getElementById('freq');
     const startBtn = document.getElementById('start');
+    const pianoElem = document.getElementById('piano');
     let audioContext, analyser, dataArray, source;
+
+    // Piano keys from C3 to B4
+    // Piano keys from A2 to C6
+    const pianoNotes = [];
+    const noteNames = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+    for (let octave = 2; octave <= 6; octave++) {
+      for (let i = 0; i < noteNames.length; i++) {
+        // Start at A2, end at C6
+        if ((octave === 2 && i < 9) || (octave === 6 && i > 0)) continue;
+        pianoNotes.push(noteNames[i] + octave);
+      }
+    }
+
+    function renderPiano() {
+      pianoElem.innerHTML = '';
+      // Render white keys
+      let whiteKeyCount = 0;
+      for (let i = 0; i < pianoNotes.length; i++) {
+        const note = pianoNotes[i];
+        if (!note.includes('#')) {
+          const key = document.createElement('div');
+          key.className = 'white-key';
+          key.dataset.note = note;
+          key.innerHTML = `<span style="position:absolute;bottom:4px;left:4px;font-size:0.8em;color:#222;">${note}</span>`;
+          pianoElem.appendChild(key);
+          whiteKeyCount++;
+        }
+      }
+      // Render black keys as siblings, absolutely positioned
+      let whiteIndex = 0;
+      for (let i = 0; i < pianoNotes.length; i++) {
+        const note = pianoNotes[i];
+        if (!note.includes('#')) {
+          whiteIndex++;
+        } else {
+          // Only render black key if not after E or B
+          const prevNote = pianoNotes[i - 1];
+          if (prevNote && !(prevNote.startsWith('E') || prevNote.startsWith('B'))) {
+            const blackKey = document.createElement('div');
+            blackKey.className = 'black-key';
+            blackKey.dataset.note = note;
+            // Position between previous and next white key
+            blackKey.style.left = (whiteIndex * 40 + 0) + 'px';
+            blackKey.innerHTML = `<span style=\"position:absolute;top:4px;left:4px;font-size:0.8em;color:#fff;\">${note}</span>`;
+            pianoElem.appendChild(blackKey);
+          }
+        }
+      }
+    }
+    renderPiano();
+
+    function highlightPiano(noteName) {
+      Array.from(pianoElem.children).forEach(key => {
+        if (key.dataset.note === noteName) {
+          key.style.background = key.className === 'black-key' ? '#0cf' : '#8ef';
+        } else {
+          key.style.background = key.className === 'black-key' ? '#222' : '#fff';
+        }
+      });
+    }
 
     // Note frequencies (A0 to C8)
     const notes = [
@@ -79,7 +205,9 @@
         analyser.getFloatTimeDomainData(dataArray);
         const freq = autoCorrelate(dataArray, audioContext.sampleRate);
         freqElem.textContent = 'Frequency: ' + (freq ? freq.toFixed(2) : '--') + ' Hz';
-        noteElem.textContent = 'Note: ' + freqToNote(freq);
+        const noteName = freqToNote(freq);
+        noteElem.textContent = 'Note: ' + noteName;
+        highlightPiano(noteName);
         requestAnimationFrame(update);
       }
       update();
