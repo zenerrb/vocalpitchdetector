@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Real-Time Pitch Detector</title>
+  <style>
+    body { font-family: Arial, sans-serif; text-align: center; margin-top: 50px; }
+    #note { font-size: 2em; margin-top: 20px; }
+    #freq { font-size: 1.2em; color: #555; }
+    button { padding: 10px 20px; font-size: 1em; }
+  </style>
+</head>
+<body>
+  <h1>Real-Time Pitch Detector</h1>
+  <button id="start">Start Listening</button>
+  <div id="note">Note: --</div>
+  <div id="freq">Frequency: -- Hz</div>
+  <script>
+    const noteElem = document.getElementById('note');
+    const freqElem = document.getElementById('freq');
+    const startBtn = document.getElementById('start');
+    let audioContext, analyser, dataArray, source;
+
+    // Note frequencies (A0 to C8)
+    const notes = [
+      'C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'
+    ];
+    function freqToNote(frequency) {
+      if (!frequency || frequency < 27.5 || frequency > 4186) return '--';
+      const A4 = 440;
+      const n = Math.round(12 * Math.log2(frequency / A4));
+      // Ensure noteIndex is always positive
+      const noteIndex = ((n + 9) % 12 + 12) % 12;
+      const octave = 4 + Math.floor((n + 9) / 12);
+      return notes[noteIndex] + octave;
+    }
+
+    function autoCorrelate(buf, sampleRate) {
+      // Simple autocorrelation
+      let SIZE = buf.length;
+      let rms = 0;
+      for (let i = 0; i < SIZE; i++) rms += buf[i] * buf[i];
+      rms = Math.sqrt(rms / SIZE);
+      if (rms < 0.01) return null;
+      let r1 = 0, r2 = SIZE - 1, thres = 0.2;
+      for (let i = 0; i < SIZE / 2; i++) {
+        if (Math.abs(buf[i]) < thres) { r1 = i; break; }
+      }
+      for (let i = 1; i < SIZE / 2; i++) {
+        if (Math.abs(buf[SIZE - i]) < thres) { r2 = SIZE - i; break; }
+      }
+      buf = buf.slice(r1, r2);
+      SIZE = buf.length;
+      let c = new Array(SIZE).fill(0);
+      for (let i = 0; i < SIZE; i++) {
+        for (let j = 0; j < SIZE - i; j++) {
+          c[i] = c[i] + buf[j] * buf[j + i];
+        }
+      }
+      let d = 0; while (c[d] > c[d + 1]) d++;
+      let maxval = -1, maxpos = -1;
+      for (let i = d; i < SIZE; i++) {
+        if (c[i] > maxval) { maxval = c[i]; maxpos = i; }
+      }
+      let T0 = maxpos;
+      return sampleRate / T0;
+    }
+
+    startBtn.onclick = async () => {
+      startBtn.disabled = true;
+      audioContext = new (window.AudioContext || window.webkitAudioContext)();
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      source = audioContext.createMediaStreamSource(stream);
+      analyser = audioContext.createAnalyser();
+      analyser.fftSize = 2048;
+      dataArray = new Float32Array(analyser.fftSize);
+      source.connect(analyser);
+      function update() {
+        analyser.getFloatTimeDomainData(dataArray);
+        const freq = autoCorrelate(dataArray, audioContext.sampleRate);
+        freqElem.textContent = 'Frequency: ' + (freq ? freq.toFixed(2) : '--') + ' Hz';
+        noteElem.textContent = 'Note: ' + freqToNote(freq);
+        requestAnimationFrame(update);
+      }
+      update();
+    };
+  </script>
+</body>
+</html>
