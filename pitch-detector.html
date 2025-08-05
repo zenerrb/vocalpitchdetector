@@ -7,15 +7,14 @@
     .white-key {
       position: relative;
       display: inline-block;
-      width: 40px;
-      height: 120px;
+      width: 80px;
+      height: 240px;
       background: #fff;
       border: 1px solid #888;
       box-sizing: border-box;
-      border-radius: 0 0 10px 10px;
+      border-radius: 0 0 20px 20px;
       vertical-align: bottom;
       cursor: pointer;
-      transition: background 0.2s;
       z-index: 1;
     }
     .black-key {
@@ -23,16 +22,18 @@
       left: 80%;
       top: 0;
       transform: translateX(-50%);
-      width: 24px;
-      height: 70px;
+      width: 48px;
+      height: 140px;
       background: #222;
       border: 1px solid #888;
       box-sizing: border-box;
-      border-radius: 0 0 6px 6px;
+      border-radius: 0 0 12px 12px;
       vertical-align: bottom;
       cursor: pointer;
-      transition: background 0.2s;
       z-index: 10;
+    }
+    .fade {
+      transition: background 0.8s;
     }
     body { font-family: Arial, sans-serif; text-align: center; margin-top: 50px; }
     #note { font-size: 2em; margin-top: 20px; }
@@ -40,38 +41,13 @@
     button { padding: 10px 20px; font-size: 1em; }
     #piano {
       position: relative;
-      display: inline-block;
+      display: flex;
+      flex-direction: row;
       margin: 40px 0;
-      height: 120px;
-      min-width: 960px;
+      height: 240px;
+      min-width: 1920px;
     }
-    .white-key {
-      position: relative;
-      display: inline-block;
-      width: 40px;
-      height: 120px;
-      background: #fff;
-      border: 1px solid #888;
-      box-sizing: border-box;
-      border-radius: 0 0 10px 10px;
-      vertical-align: bottom;
-      cursor: pointer;
-      transition: background 0.2s;
-      z-index: 1;
-    }
-    .black-key {
-      position: absolute;
-      width: 24px;
-      height: 70px;
-      background: #222;
-      border: 1px solid #888;
-      box-sizing: border-box;
-      border-radius: 0 0 6px 6px;
-      vertical-align: bottom;
-      cursor: pointer;
-      transition: background 0.2s;
-      z-index: 2;
-    }
+    /* Removed duplicate .white-key and .black-key rules with 0.2s transition */
   </style>
 </head>
 <body>
@@ -79,7 +55,9 @@
   <button id="start">Start Listening</button>
   <div id="note">Note: --</div>
   <div id="freq">Frequency: -- Hz</div>
-  <div id="piano"></div>
+  <div id="piano-scroll" style="width:100%;overflow-x:auto;">
+    <div id="piano"></div>
+  </div>
   <script>
     const noteElem = document.getElementById('note');
     const freqElem = document.getElementById('freq');
@@ -87,62 +65,81 @@
     const pianoElem = document.getElementById('piano');
     let audioContext, analyser, dataArray, source;
 
-    // Piano keys from C3 to B4
-    // Piano keys from A2 to C6
+    // Piano keys from C2 to C6
     const pianoNotes = [];
     const noteNames = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
-    for (let octave = 2; octave <= 6; octave++) {
-      for (let i = 0; i < noteNames.length; i++) {
-        // Start at A2, end at C6
-        if ((octave === 2 && i < 9) || (octave === 6 && i > 0)) continue;
-        pianoNotes.push(noteNames[i] + octave);
+    let reachedEnd = false;
+    for (let octave = 2; octave <= 6 && !reachedEnd; octave++) {
+      for (let i = 0; i < noteNames.length && !reachedEnd; i++) {
+        const note = noteNames[i] + octave;
+        pianoNotes.push(note);
+        if (note === 'C6') reachedEnd = true;
       }
     }
 
     function renderPiano() {
       pianoElem.innerHTML = '';
-      // Render white keys
-      let whiteKeyCount = 0;
+      // Render white keys and keep references
+      const whiteKeyElems = [];
       for (let i = 0; i < pianoNotes.length; i++) {
         const note = pianoNotes[i];
         if (!note.includes('#')) {
           const key = document.createElement('div');
           key.className = 'white-key';
           key.dataset.note = note;
-          key.innerHTML = `<span style="position:absolute;bottom:4px;left:4px;font-size:0.8em;color:#222;">${note}</span>`;
+          key.innerHTML = `<span style="position:absolute;bottom:8px;left:28px;font-size:1.2em;color:#222;">${note}</span>`;
           pianoElem.appendChild(key);
-          whiteKeyCount++;
+          whiteKeyElems.push(key);
         }
       }
-      // Render black keys as siblings, absolutely positioned
-      let whiteIndex = 0;
-      for (let i = 0; i < pianoNotes.length; i++) {
-        const note = pianoNotes[i];
-        if (!note.includes('#')) {
-          whiteIndex++;
-        } else {
-          // Only render black key if not after E or B
-          const prevNote = pianoNotes[i - 1];
-          if (prevNote && !(prevNote.startsWith('E') || prevNote.startsWith('B'))) {
-            const blackKey = document.createElement('div');
-            blackKey.className = 'black-key';
-            blackKey.dataset.note = note;
-            // Position between previous and next white key
-            blackKey.style.left = (whiteIndex * 40 + 0) + 'px';
-            blackKey.innerHTML = `<span style=\"position:absolute;top:4px;left:4px;font-size:0.8em;color:#fff;\">${note}</span>`;
-            pianoElem.appendChild(blackKey);
+      // After layout, position black keys using actual white key positions
+      setTimeout(() => {
+        const blackKeyWidth = 48;
+        let whiteIndex = 0;
+        for (let i = 0; i < pianoNotes.length; i++) {
+          const note = pianoNotes[i];
+          if (!note.includes('#')) {
+            whiteIndex++;
+          } else {
+            // Only render black key if not after E or B
+            const prevNote = pianoNotes[i - 1];
+            if (prevNote && !(prevNote.startsWith('E') || prevNote.startsWith('B'))) {
+              const prevWhiteIdx = whiteIndex - 1;
+              const nextWhiteIdx = whiteIndex;
+              if (prevWhiteIdx >= 0 && nextWhiteIdx < whiteKeyElems.length) {
+                const leftPrev = whiteKeyElems[prevWhiteIdx].offsetLeft;
+                const leftNext = whiteKeyElems[nextWhiteIdx].offsetLeft;
+                const left = ((leftPrev + leftNext) / 2) - (blackKeyWidth / 2) + 56;
+                const blackKey = document.createElement('div');
+                blackKey.className = 'black-key';
+                blackKey.dataset.note = note;
+                blackKey.style.left = left + 'px';
+                blackKey.innerHTML = `<span style=\"position:absolute;top:8px;left:8px;font-size:1.2em;color:#fff;\">${note}</span>`;
+                pianoElem.appendChild(blackKey);
+              }
+            }
           }
         }
-      }
+      }, 0);
     }
     renderPiano();
 
     function highlightPiano(noteName) {
       Array.from(pianoElem.children).forEach(key => {
+        const isBlack = key.classList.contains('black-key');
         if (key.dataset.note === noteName) {
-          key.style.background = key.className === 'black-key' ? '#0cf' : '#8ef';
+          // Instantly light up
+          key.classList.remove('fade');
+          key.style.transition = 'none';
+          key.style.background = isBlack ? '#0cf' : '#8ef';
         } else {
-          key.style.background = key.className === 'black-key' ? '#222' : '#fff';
+          // Fade out slowly
+          const targetBg = isBlack ? '#222' : '#fff';
+          if (key.style.background !== targetBg) {
+            key.classList.add('fade');
+            key.style.transition = '';
+            key.style.background = targetBg;
+          }
         }
       });
     }
