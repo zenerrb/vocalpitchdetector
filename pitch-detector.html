@@ -125,6 +125,8 @@
     renderPiano();
 
     function highlightPiano(noteName) {
+      const pianoScrollElem = document.getElementById('piano-scroll');
+      let targetKey = null;
       Array.from(pianoElem.children).forEach(key => {
         const isBlack = key.classList.contains('black-key');
         if (key.dataset.note === noteName) {
@@ -132,6 +134,7 @@
           key.classList.remove('fade');
           key.style.transition = 'none';
           key.style.background = isBlack ? '#0cf' : '#8ef';
+          targetKey = key;
         } else {
           // Fade out slowly
           const targetBg = isBlack ? '#222' : '#fff';
@@ -142,6 +145,19 @@
           }
         }
       });
+      // Scroll to show the highlighted key if offscreen
+      if (targetKey && pianoScrollElem) {
+        const keyLeft = targetKey.offsetLeft;
+        const keyWidth = targetKey.offsetWidth;
+        const scrollLeft = pianoScrollElem.scrollLeft;
+        const scrollWidth = pianoScrollElem.offsetWidth;
+        // Center the key in the viewport if possible
+        const targetScroll = keyLeft + keyWidth / 2 - scrollWidth / 2;
+        // Only scroll if the key is not fully visible
+        if (keyLeft < scrollLeft || keyLeft + keyWidth > scrollLeft + scrollWidth) {
+          pianoScrollElem.scrollTo({ left: targetScroll, behavior: 'smooth' });
+        }
+      }
     }
 
     // Note frequencies (A0 to C8)
