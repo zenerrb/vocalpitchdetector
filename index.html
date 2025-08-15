@@ -318,6 +318,7 @@
     const pianoElem = document.getElementById('piano');
     const darkToggle = document.getElementById('darkToggle');
     let audioContext, analyser, dataArray, source, stream, listening = false, animationId;
+    let currentActiveNote = '--';
 
     // Dark mode persistence
     const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
@@ -345,9 +346,11 @@
       }
     }
 
+    let whiteKeyElems = [];
+
     function renderPiano() {
       pianoElem.innerHTML = '';
-      const whiteKeyElems = [];
+      whiteKeyElems = [];
       for (let i = 0; i < pianoNotes.length; i++) {
         const note = pianoNotes[i];
         if (!note.includes('#')) {
@@ -359,38 +362,54 @@
           whiteKeyElems.push(key);
         }
       }
-      // Render black keys after layout
-      setTimeout(() => {
-        const blackKeyWidth = 48;
-        let whiteIndex = 0;
-        for (let i = 0; i < pianoNotes.length; i++) {
-          const note = pianoNotes[i];
-            if (!note.includes('#')) { whiteIndex++; }
-            else {
-              const prevNote = pianoNotes[i - 1];
-              if (prevNote && !(prevNote.startsWith('E') || prevNote.startsWith('B'))) {
-                const prevWhiteIdx = whiteIndex - 1;
-                const nextWhiteIdx = whiteIndex;
-                if (prevWhiteIdx >= 0 && nextWhiteIdx < whiteKeyElems.length) {
-                  const leftPrev = whiteKeyElems[prevWhiteIdx].offsetLeft;
-                  const leftNext = whiteKeyElems[nextWhiteIdx].offsetLeft;
-                  const left = ((leftPrev + leftNext) / 2) - (blackKeyWidth / 2) + 56;
-                  const blackKey = document.createElement('div');
-                  blackKey.className = 'black-key';
-                  blackKey.dataset.note = note;
-                  blackKey.style.left = left + 'px';
-                  blackKey.textContent = note;
-                  pianoElem.appendChild(blackKey);
-                }
-              }
-            }
-        }
-      }, 0);
+      // Defer black key positioning until after whites have layout metrics
+      requestAnimationFrame(positionBlackKeys);
     }
+
+    function positionBlackKeys() {
+      // Remove existing black keys
+      pianoElem.querySelectorAll('.black-key').forEach(k => k.remove());
+      let whiteIndex = 0;
+      for (let i = 0; i < pianoNotes.length; i++) {
+        const note = pianoNotes[i];
+        if (!note.includes('#')) { whiteIndex++; continue; }
+        const prevNote = pianoNotes[i - 1];
+        if (!prevNote || prevNote.startsWith('E') || prevNote.startsWith('B')) continue; // skip positions where no black key
+        const prevWhiteIdx = whiteIndex - 1;
+        const nextWhiteIdx = whiteIndex;
+        if (prevWhiteIdx < 0 || nextWhiteIdx >= whiteKeyElems.length) continue;
+        const prevRect = whiteKeyElems[prevWhiteIdx].getBoundingClientRect();
+        const nextRect = whiteKeyElems[nextWhiteIdx].getBoundingClientRect();
+        const pianoRect = pianoElem.getBoundingClientRect();
+        // Center between the right edge of previous and left edge of next white key
+        const center = (prevRect.right + nextRect.left) / 2 - pianoRect.left;
+        const blackKey = document.createElement('div');
+        blackKey.className = 'black-key';
+        blackKey.dataset.note = note;
+        blackKey.style.left = center + 'px'; // transform:translateX(-50%) centers it
+        blackKey.textContent = note;
+        if (note === currentActiveNote) blackKey.classList.add('active');
+        pianoElem.appendChild(blackKey);
+      }
+    }
+
+    // Recalculate on resize / orientation change (debounced)
+    let resizeTimer;
+    function handleResize() {
+      clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(() => {
+        // Only reposition (no need to rebuild whites) unless count changed
+        positionBlackKeys();
+      }, 60);
+    }
+    window.addEventListener('resize', handleResize);
+    window.addEventListener('orientationchange', handleResize);
+
     renderPiano();
 
     function highlightPiano(noteName) {
       const pianoScrollElem = document.getElementById('piano-scroll');
+      currentActiveNote = noteName;
       let targetKey = null;
       Array.from(pianoElem.children).forEach(key => {
         if (key.dataset.note === noteName) {
