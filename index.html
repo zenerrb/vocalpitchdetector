@@ -325,13 +325,20 @@
     if (localStorage.getItem('vpd-theme') === 'dark' || (!localStorage.getItem('vpd-theme') && prefersDark)) {
       document.body.classList.add('dark-mode');
       darkToggle.setAttribute('aria-pressed','true');
-      darkToggle.textContent = '☀️';
     }
+    function updateThemeToggleLabel() {
+      const isDark = document.body.classList.contains('dark-mode');
+      // Show label indicating the target theme when clicked OR current theme? We'll show target for clarity
+      darkToggle.textContent = isDark ? 'Light Mode' : 'Dark Mode';
+      darkToggle.title = isDark ? 'Switch to light mode' : 'Switch to dark mode';
+      darkToggle.setAttribute('aria-label', darkToggle.title);
+    }
+    updateThemeToggleLabel();
     darkToggle.addEventListener('click', () => {
       const isDark = document.body.classList.toggle('dark-mode');
       darkToggle.setAttribute('aria-pressed', String(isDark));
-      darkToggle.textContent = isDark ? '☀️' : '🌙';
       localStorage.setItem('vpd-theme', isDark ? 'dark' : 'light');
+      updateThemeToggleLabel();
     });
 
     // Piano keys from C2 to C6
