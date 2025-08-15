@@ -4,106 +4,334 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Vocal Pitch Detector</title>
+  <meta name="theme-color" content="#0a84ff" />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <style>
-    .white-key {
-      position: relative;
-      display: inline-block;
-      width: 80px;
-      height: 30vh;
-      min-height: 80px;
-      max-height: 240px;
-      background: #fff;
-      border: 1px solid #888;
-      box-sizing: border-box;
-      border-radius: 0 0 20px 20px;
-      vertical-align: bottom;
-      cursor: pointer;
-      z-index: 1;
-      touch-action: manipulation;
+    :root {
+      --bg: #f5f7fa;
+      --bg-alt: #ffffff;
+      --bg-elev: #ffffffcc;
+      --text: #0f1419;
+      --text-dim: #48525c;
+      --primary: #0a84ff;
+      --primary-glow: #7cc4ff;
+      --border: #d8e1ea;
+      --border-strong: #b3c2d1;
+      --shadow: 0 4px 10px -2px rgba(0,0,0,.08), 0 2px 4px -1px rgba(0,0,0,.06);
+      --radius-sm: 6px;
+      --radius: 14px;
+      --radius-lg: 22px;
+      --focus: 0 0 0 3px #0a84ff40;
+      --key-white: #ffffff;
+      --key-white-edge: #c9d3dd;
+      --key-black: #14181d;
+      --highlight-white: linear-gradient(160deg,#b7ecff,#79c6ff 60%,#49a4ff);
+      --highlight-black: linear-gradient(145deg,#27c3ff,#1787ff 60%,#0068ff);
+      --danger: #d93030;
+      --warning: #f7b537;
+      --success: #12a150;
+      --font-stack: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, 'Helvetica Neue', Arial, sans-serif;
+      --transition-fast: 140ms cubic-bezier(.4,0,.2,1);
+      --transition: 220ms cubic-bezier(.4,0,.2,1);
     }
-    .black-key {
-      position: absolute;
-      left: 80%;
-      top: 0;
-      transform: translateX(-50%);
-      width: 48px;
-      height: 18vh;
-      min-height: 48px;
-      max-height: 140px;
-      background: #222;
-      border: 1px solid #888;
-      box-sizing: border-box;
-      border-radius: 0 0 12px 12px;
-      vertical-align: bottom;
-      cursor: pointer;
-      z-index: 10;
-      touch-action: manipulation;
+    body.dark-mode {
+      --bg: #0f1215;
+      --bg-alt: #151a20;
+      --bg-elev: #1c232bfa;
+      --text: #eef2f6;
+      --text-dim: #95a2b1;
+      --border: #28313b;
+      --border-strong: #3a4652;
+      --key-white: #f3f6f9;
+      --key-white-edge: #5a6673;
+      --key-black: #070a0d;
     }
-    .fade {
-      transition: background 0.8s;
-    }
+
+    * { box-sizing: border-box; }
+    html, body { height: 100%; }
     body {
-      font-family: Arial, sans-serif;
-      text-align: center;
-      margin-top: 2vh;
-      margin-bottom: 2vh;
-      padding: 0;
-      background: #fafafa;
+      margin: 0;
+      font-family: var(--font-stack);
+      background: radial-gradient(circle at 30% 20%, #ffffff, var(--bg) 60%) fixed;
+      color: var(--text);
+      -webkit-font-smoothing: antialiased;
+      text-rendering: optimizeLegibility;
+      display: flex;
+      flex-direction: column;
     }
-    #note {
-      font-size: 2em;
-      margin-top: 2vh;
+    body.dark-mode { background: radial-gradient(circle at 70% 30%, #1e262e, var(--bg) 65%) fixed; }
+
+    header {
+      padding: clamp(0.75rem, 1.5vw, 1.1rem) clamp(1rem, 2vw, 2rem);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      backdrop-filter: blur(12px) saturate(140%);
+      background: linear-gradient(90deg,var(--bg-elev),var(--bg-elev));
+      border-bottom: 1px solid var(--border);
+      position: sticky;
+      top: 0;
+      z-index: 40;
+    }
+    h1 {
+      margin: 0;
+      font-size: clamp(1.2rem, 2.8vw, 1.85rem);
+      font-weight: 600;
+      letter-spacing: .5px;
+      background: linear-gradient(120deg,var(--primary) 30%, var(--primary-glow));
+  background-clip: text;
+      -webkit-background-clip: text;
+      color: transparent;
+    }
+    #app {
+      width: 100%;
+      max-width: 1180px;
+      margin: 0 auto;
+      padding: 1.4rem clamp(.75rem,2vw,1.75rem) 3rem;
+      flex: 1 1 auto;
+      display: flex;
+      flex-direction: column;
+      gap: 2.2rem;
+    }
+
+    .panel {
+      background: var(--bg-alt);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: clamp(1rem,2.8vw,1.85rem);
+      box-shadow: var(--shadow);
+      position: relative;
+      overflow: hidden;
+    }
+    .panel:before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(140deg, var(--primary)10%, transparent 45%, transparent 55%, var(--primary-glow) 90%);
+      opacity: .07;
+      pointer-events: none;
+    }
+
+    .display-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit,minmax(180px,1fr));
+      gap: 1.25rem;
+      align-items: stretch;
+    }
+    .metric {
+      background: linear-gradient(180deg,var(--bg-alt), var(--bg) 120%);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: .9rem 1.1rem 1rem;
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      gap: .35rem;
+      min-height: 112px;
+    }
+    .metric h2 {
+      font-size: .8rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 1.4px;
+      margin: 0;
+      color: var(--text-dim);
+    }
+    .metric .value {
+      font-size: clamp(1.4rem,3.8vw,2.8rem);
+      font-weight: 600;
+      line-height: 1.05;
+      letter-spacing: .5px;
+      font-variant-numeric: tabular-nums;
       word-break: break-word;
     }
-    #freq {
-      font-size: 1.2em;
-      color: #555;
-      word-break: break-word;
+    .metric.small .value { font-size: clamp(1rem,2.5vw,1.45rem); }
+
+    .actions { display:flex; flex-wrap:wrap; gap:.75rem; }
+    button, .btn {
+      --btn-bg: var(--primary);
+      --btn-bg-hover: #006fe6;
+      --btn-bg-active: #005bbd;
+      --btn-text: #fff;
+      font: inherit;
+      font-weight: 600;
+      padding: .8rem 1.3rem .85rem;
+      border-radius: var(--radius-sm);
+      background: var(--btn-bg);
+      color: var(--btn-text);
+      border: 1px solid var(--btn-bg);
+      cursor: pointer;
+      position: relative;
+      display: inline-flex;
+      align-items: center;
+      gap: .55rem;
+      line-height: 1.1;
+      letter-spacing: .3px;
+      transition: background var(--transition-fast), transform var(--transition-fast), box-shadow var(--transition-fast);
+      box-shadow: 0 1px 2px rgba(0,0,0,.15), 0 4px 10px -4px rgba(0,0,0,.25);
+      will-change: transform;
+      text-decoration: none;
     }
-    button {
-      padding: 2vh 4vw;
-      font-size: 1.2em;
-      border-radius: 8px;
-      border: 1px solid #888;
-      background: #e0e0e0;
-      margin: 1vh 0;
-      touch-action: manipulation;
+    button:focus-visible { outline: none; box-shadow: var(--focus); }
+    button:hover { background: var(--btn-bg-hover); }
+    button:active { background: var(--btn-bg-active); transform: translateY(1px); }
+    button:disabled { opacity: .55; cursor: not-allowed; filter: grayscale(.3); }
+    .btn-secondary { --btn-bg: var(--bg-alt); --btn-bg-hover: #e2e8f0; --btn-bg-active:#d5dee8; --btn-text: var(--text); border-color: var(--border-strong); }
+    body.dark-mode .btn-secondary { --btn-bg: #232b33; --btn-bg-hover:#2c3540; --btn-bg-active:#1d252d; }
+
+    /* Piano */
+    #piano-wrapper { position: relative; }
+    #piano-scroll {
+      width: 100%;
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+      padding: 1rem .4rem 1.6rem;
+      margin: 0 auto;
+      border-radius: var(--radius);
+      background: linear-gradient(180deg,var(--bg-alt), var(--bg));
+      border: 1px solid var(--border);
+      box-shadow: inset 0 0 0 1px var(--border), var(--shadow);
     }
+    #piano-scroll::-webkit-scrollbar { height: 14px; }
+    #piano-scroll::-webkit-scrollbar-track { background: transparent; }
+    #piano-scroll::-webkit-scrollbar-thumb { background: #b8c6d4; border-radius: 100px; border: 3px solid var(--bg-alt); }
+    body.dark-mode #piano-scroll::-webkit-scrollbar-thumb { background:#465563; border-color: #1d252d; }
+
     #piano {
       position: relative;
       display: flex;
       flex-direction: row;
-      margin: 4vh auto;
-      height: 30vh;
-      min-height: 80px;
-      max-height: 240px;
+      height: clamp(180px, 30vh, 240px);
+      min-height: 140px;
       width: 2320px;
+      padding: 0 4px 6px;
+      user-select: none;
     }
-    #piano-scroll {
-      width: 100vw;
-      max-width: 100%;
-      overflow-x: auto;
-      -webkit-overflow-scrolling: touch;
-      box-sizing: border-box;
-      padding-bottom: 2vh;
+    .white-key {
+      position: relative;
+      display: inline-flex;
+      justify-content: center;
+      align-items: flex-end;
+      width: 80px;
+      flex: 0 0 80px;
+      height: 100%;
+      background: linear-gradient(180deg,var(--key-white) 0%, #e9eef3 96%);
+      border: 1px solid var(--key-white-edge);
+      border-top: 1px solid #f8fafc;
+      border-radius: 0 0 18px 18px;
+      margin: 0 1px;
+      font-size: .85rem;
+      font-weight: 500;
+      color: var(--text-dim);
+      letter-spacing: .5px;
+      cursor: pointer;
+      transition: background var(--transition), color var(--transition), box-shadow var(--transition), transform var(--transition-fast);
+      box-shadow: inset 0 0 0 1px #fff, 0 4px 8px -3px rgba(0,0,0,.25);
     }
-    /* Removed duplicate .white-key and .black-key rules with 0.2s transition */
+    .white-key span { position: absolute; bottom: 8px; left: 50%; transform: translateX(-50%); pointer-events: none; }
+    .white-key:active { transform: translateY(2px); }
+    .white-key.active {
+      background: var(--highlight-white);
+      color: #06314d;
+      box-shadow: 0 0 0 1px #117ebf, 0 4px 14px -3px rgba(0,132,255,.55), 0 0 0 3px #0a84ff40;
+      z-index: 15;
+    }
+
+    .black-key {
+      position: absolute;
+      top: 0;
+      transform: translateX(-50%);
+      width: 48px;
+      height: 60%;
+      min-height: 100px;
+      background: linear-gradient(175deg,#242b32,#0d1114 80%);
+      border: 1px solid #0b0f12;
+      border-radius: 0 0 12px 12px;
+      cursor: pointer;
+      z-index: 25;
+      display:flex;
+      align-items: flex-start;
+      justify-content: flex-start;
+      padding: 6px 0 0 6px;
+      font-size: .75rem;
+      font-weight: 500;
+      letter-spacing: .5px;
+      color: #d4dde5;
+      transition: background var(--transition), box-shadow var(--transition), transform var(--transition-fast), color var(--transition);
+      box-shadow: inset 0 0 0 1px #303c46, 0 4px 10px -3px rgba(0,0,0,.55);
+    }
+    .black-key:active { transform: translateX(-50%) translateY(2px); }
+    .black-key.active {
+      background: var(--highlight-black);
+      color: #eef6ff;
+      box-shadow: 0 0 0 1px #1787ff, 0 4px 16px -3px rgba(0,120,255,.7), 0 0 0 3px #0a84ff33;
+    }
+
+    .helper-text { font-size: .82rem; color: var(--text-dim); line-height: 1.4; }
+    a { color: var(--primary); text-decoration: none; } a:hover { text-decoration: underline; }
+
+    .mode-indicator { font-size: .7rem; letter-spacing: 1.5px; font-weight: 600; opacity: .75; }
+    .spacer { flex: 1 1 auto; }
+    .toolbar { display: flex; gap:.6rem; align-items: center; }
+    .toggle-dark { --btn-bg: var(--bg-alt); --btn-bg-hover:#e2e9f1; --btn-bg-active:#d4dde6; color: var(--text-dim); border-color: var(--border); }
+    body.dark-mode .toggle-dark { --btn-bg:#232b33; --btn-bg-hover:#2c3540; --btn-bg-active:#1f2730; color:#d4dde5; }
+    .toggle-dark[aria-pressed="true"] { box-shadow: 0 0 0 1px var(--primary), 0 0 0 4px #0a84ff33; color: var(--primary); }
+
+    @media (max-width: 880px) {
+      #app { padding-top: 1rem; }
+      .display-grid { grid-template-columns: repeat(auto-fit,minmax(140px,1fr)); }
+      .metric { min-height: 96px; }
+      header { flex-wrap: wrap; gap: .75rem 1rem; }
+      #piano { width: 2000px; }
+    }
+    @media (max-width: 560px) {
+      #piano { width: 1700px; }
+      .white-key { width: 64px; flex: 0 0 64px; }
+    }
   </style>
 </head>
 <body>
-  <h1>Vocal Pitch Detector</h1>
-  <button id="start">Start Listening</button>
-  <div id="note">Note: --</div>
-  <div id="freq">Frequency: -- Hz</div>
-  <div id="piano-scroll" style="width:100%;overflow-x:auto;">
-    <div id="piano"></div>
-  </div>
+  <header>
+    <h1 aria-label="App title">Vocal Pitch Detector</h1>
+    <div class="toolbar" role="toolbar" aria-label="Display controls">
+      <button id="darkToggle" class="toggle-dark btn-secondary" type="button" aria-pressed="false" title="Toggle dark mode">🌙</button>
+      <button id="start" type="button">Start</button>
+      <button id="stop" type="button" disabled>Stop</button>
+    </div>
+  </header>
+  <main id="app" tabindex="-1">
+    <section class="panel" aria-label="Piano visualization" id="piano-wrapper">
+      <div id="piano-scroll" aria-label="Scrollable piano" tabindex="0">
+        <div id="piano" role="group" aria-label="Virtual piano keyboard"></div>
+      </div>
+    </section>
+    <footer class="helper-text" style="text-align:center; margin-top:auto; padding-bottom:2rem;">
+      <span>Pitch highlighting active. Start to detect; Stop to release microphone.</span>
+    </footer>
+  </main>
   <script>
-    const noteElem = document.getElementById('note');
-    const freqElem = document.getElementById('freq');
+    // Elements
     const startBtn = document.getElementById('start');
+    const stopBtn = document.getElementById('stop');
     const pianoElem = document.getElementById('piano');
+    const darkToggle = document.getElementById('darkToggle');
     let audioContext, analyser, dataArray, source, stream, listening = false, animationId;
+
+    // Dark mode persistence
+    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+    if (localStorage.getItem('vpd-theme') === 'dark' || (!localStorage.getItem('vpd-theme') && prefersDark)) {
+      document.body.classList.add('dark-mode');
+      darkToggle.setAttribute('aria-pressed','true');
+      darkToggle.textContent = '☀️';
+    }
+    darkToggle.addEventListener('click', () => {
+      const isDark = document.body.classList.toggle('dark-mode');
+      darkToggle.setAttribute('aria-pressed', String(isDark));
+      darkToggle.textContent = isDark ? '☀️' : '🌙';
+      localStorage.setItem('vpd-theme', isDark ? 'dark' : 'light');
+    });
 
     // Piano keys from C2 to C6
     const pianoNotes = [];
@@ -119,7 +347,6 @@
 
     function renderPiano() {
       pianoElem.innerHTML = '';
-      // Render white keys and keep references
       const whiteKeyElems = [];
       for (let i = 0; i < pianoNotes.length; i++) {
         const note = pianoNotes[i];
@@ -127,38 +354,36 @@
           const key = document.createElement('div');
           key.className = 'white-key';
           key.dataset.note = note;
-          key.innerHTML = `<span style="position:absolute;bottom:8px;left:28px;font-size:1.2em;color:#222;">${note}</span>`;
+          key.innerHTML = `<span>${note}</span>`;
           pianoElem.appendChild(key);
           whiteKeyElems.push(key);
         }
       }
-      // After layout, position black keys using actual white key positions
+      // Render black keys after layout
       setTimeout(() => {
         const blackKeyWidth = 48;
         let whiteIndex = 0;
         for (let i = 0; i < pianoNotes.length; i++) {
           const note = pianoNotes[i];
-          if (!note.includes('#')) {
-            whiteIndex++;
-          } else {
-            // Only render black key if not after E or B
-            const prevNote = pianoNotes[i - 1];
-            if (prevNote && !(prevNote.startsWith('E') || prevNote.startsWith('B'))) {
-              const prevWhiteIdx = whiteIndex - 1;
-              const nextWhiteIdx = whiteIndex;
-              if (prevWhiteIdx >= 0 && nextWhiteIdx < whiteKeyElems.length) {
-                const leftPrev = whiteKeyElems[prevWhiteIdx].offsetLeft;
-                const leftNext = whiteKeyElems[nextWhiteIdx].offsetLeft;
-                const left = ((leftPrev + leftNext) / 2) - (blackKeyWidth / 2) + 56;
-                const blackKey = document.createElement('div');
-                blackKey.className = 'black-key';
-                blackKey.dataset.note = note;
-                blackKey.style.left = left + 'px';
-                blackKey.innerHTML = `<span style=\"position:absolute;top:8px;left:8px;font-size:1.2em;color:#fff;\">${note}</span>`;
-                pianoElem.appendChild(blackKey);
+            if (!note.includes('#')) { whiteIndex++; }
+            else {
+              const prevNote = pianoNotes[i - 1];
+              if (prevNote && !(prevNote.startsWith('E') || prevNote.startsWith('B'))) {
+                const prevWhiteIdx = whiteIndex - 1;
+                const nextWhiteIdx = whiteIndex;
+                if (prevWhiteIdx >= 0 && nextWhiteIdx < whiteKeyElems.length) {
+                  const leftPrev = whiteKeyElems[prevWhiteIdx].offsetLeft;
+                  const leftNext = whiteKeyElems[nextWhiteIdx].offsetLeft;
+                  const left = ((leftPrev + leftNext) / 2) - (blackKeyWidth / 2) + 56;
+                  const blackKey = document.createElement('div');
+                  blackKey.className = 'black-key';
+                  blackKey.dataset.note = note;
+                  blackKey.style.left = left + 'px';
+                  blackKey.textContent = note;
+                  pianoElem.appendChild(blackKey);
+                }
               }
             }
-          }
         }
       }, 0);
     }
@@ -168,32 +393,19 @@
       const pianoScrollElem = document.getElementById('piano-scroll');
       let targetKey = null;
       Array.from(pianoElem.children).forEach(key => {
-        const isBlack = key.classList.contains('black-key');
         if (key.dataset.note === noteName) {
-          // Instantly light up
-          key.classList.remove('fade');
-          key.style.transition = 'none';
-          key.style.background = isBlack ? '#0cf' : '#8ef';
+          key.classList.add('active');
           targetKey = key;
         } else {
-          // Fade out slowly
-          const targetBg = isBlack ? '#222' : '#fff';
-          if (key.style.background !== targetBg) {
-            key.classList.add('fade');
-            key.style.transition = '';
-            key.style.background = targetBg;
-          }
+          key.classList.remove('active');
         }
       });
-      // Scroll to show the highlighted key if offscreen
       if (targetKey && pianoScrollElem) {
         const keyLeft = targetKey.offsetLeft;
         const keyWidth = targetKey.offsetWidth;
         const scrollLeft = pianoScrollElem.scrollLeft;
         const scrollWidth = pianoScrollElem.offsetWidth;
-        // Center the key in the viewport if possible
         const targetScroll = keyLeft + keyWidth / 2 - scrollWidth / 2;
-        // Only scroll if the key is not fully visible
         if (keyLeft < scrollLeft || keyLeft + keyWidth > scrollLeft + scrollWidth) {
           pianoScrollElem.scrollTo({ left: targetScroll, behavior: 'smooth' });
         }
@@ -245,12 +457,12 @@
       return sampleRate / T0;
     }
 
-    startBtn.onclick = async () => {
-      if (!listening) {
-        // Start listening
-        listening = true;
-        startBtn.textContent = 'Stop Listening';
-        startBtn.disabled = true;
+    async function startListening() {
+      if (listening) return;
+      listening = true;
+      startBtn.disabled = true;
+      stopBtn.disabled = true; // temporarily while initializing
+      try {
         audioContext = new (window.AudioContext || window.webkitAudioContext)();
         stream = await navigator.mediaDevices.getUserMedia({ audio: true });
         source = audioContext.createMediaStreamSource(stream);
@@ -258,36 +470,37 @@
         analyser.fftSize = 2048;
         dataArray = new Float32Array(analyser.fftSize);
         source.connect(analyser);
-        startBtn.disabled = false;
+        stopBtn.disabled = false;
         function update() {
           if (!listening) return;
           analyser.getFloatTimeDomainData(dataArray);
           const freq = autoCorrelate(dataArray, audioContext.sampleRate);
-          freqElem.textContent = 'Frequency: ' + (freq ? freq.toFixed(2) : '--') + ' Hz';
           const noteName = freqToNote(freq);
-          noteElem.textContent = 'Note: ' + noteName;
           highlightPiano(noteName);
           animationId = requestAnimationFrame(update);
         }
         update();
-      } else {
-        // Stop listening
+      } catch (e) {
+        console.error('Microphone access failed', e);
         listening = false;
-        startBtn.textContent = 'Start Listening';
-        if (animationId) cancelAnimationFrame(animationId);
-        if (audioContext) {
-          audioContext.close();
-          audioContext = null;
-        }
-        if (stream) {
-          stream.getTracks().forEach(track => track.stop());
-          stream = null;
-        }
-        freqElem.textContent = 'Frequency: -- Hz';
-        noteElem.textContent = 'Note: --';
-        highlightPiano('--');
+        startBtn.disabled = false;
+        stopBtn.disabled = true;
       }
-    };
+    }
+
+    function stopListening() {
+      if (!listening) return;
+      listening = false;
+      if (animationId) cancelAnimationFrame(animationId);
+      if (audioContext) { audioContext.close(); audioContext = null; }
+      if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; }
+      highlightPiano('--');
+      startBtn.disabled = false;
+      stopBtn.disabled = true;
+    }
+
+    startBtn.addEventListener('click', startListening);
+    stopBtn.addEventListener('click', stopListening);
   </script>
 </body>
 </html>
