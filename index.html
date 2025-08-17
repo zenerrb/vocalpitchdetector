@@ -429,16 +429,14 @@
   drawPianoGridLines();
     });
 
-    // Piano keys from C2 to C6
+    // Piano keys full 88-key range: A0 through C8
     const pianoNotes = [];
-    const noteNames = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
-    let reachedEnd = false;
-    for (let octave = 2; octave <= 6 && !reachedEnd; octave++) {
-      for (let i = 0; i < noteNames.length && !reachedEnd; i++) {
-        const note = noteNames[i] + octave;
-        pianoNotes.push(note);
-        if (note === 'C6') reachedEnd = true;
-      }
+    const noteNames = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B']; // semitone names
+    // MIDI numbers: A0 = 21, C8 = 108
+    for (let midi = 21; midi <= 108; midi++) {
+      const name = noteNames[midi % 12];
+      const octave = Math.floor(midi / 12) - 1;
+      pianoNotes.push(name + octave);
     }
 
     let whiteKeyElems = [];
@@ -693,8 +691,8 @@
       const orderedNotes = pianoNotes.filter(n => noteXPositions[n] != null);
       const orderedXs = orderedNotes.map(n => noteXPositions[n]);
       const orderedFreqs = orderedNotes.map(n => pianoNoteToFreq(n));
-      const baseFreq = pianoNoteToFreq('C2');
-      const maxFreq = pianoNoteToFreq('C6');
+  const baseFreq = pianoNoteToFreq(pianoNotes[0]);
+  const maxFreq = pianoNoteToFreq(pianoNotes[pianoNotes.length - 1]);
       function freqToX(f) {
         if (!f) return null;
         if (f <= baseFreq) return orderedXs[0] + 0.5;
