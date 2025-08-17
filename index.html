@@ -35,6 +35,9 @@
       --font-stack: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, 'Helvetica Neue', Arial, sans-serif;
       --transition-fast: 140ms cubic-bezier(.4,0,.2,1);
       --transition: 220ms cubic-bezier(.4,0,.2,1);
+  /* Piano sizing variables */
+  --white-key-width: 80px;
+  --piano-key-gap: 2px; /* spacing between white keys */
     }
     body.dark-mode {
       --bg: #0f1215;
@@ -201,9 +204,9 @@
 
     #piano-grid {
       position: relative;
-      width: 2320px; /* mirror piano width */
+  /* width now set dynamically in JS based on key count */
       height: clamp(180px, 30vh, 240px);
-      margin: 0 4px 0; /* flush with piano */
+  margin: 0; /* keep edges aligned with piano */
       border: 1px solid var(--border);
       border-radius: 14px 14px 0 0;
       background: linear-gradient(180deg,var(--bg-alt),var(--bg) 140%);
@@ -213,10 +216,11 @@
       position: relative;
       display: flex;
       flex-direction: row;
+  gap: var(--piano-key-gap);
       height: clamp(180px, 30vh, 240px);
       min-height: 140px;
-      width: 2320px;
-      padding: 0 4px 6px;
+  /* width set dynamically; remove horizontal padding to align with grid */
+  padding: 0 0 6px;
       user-select: none;
       border: 1px solid var(--border);
       border-top: none;
@@ -237,14 +241,14 @@
       display: inline-flex;
       justify-content: center;
       align-items: flex-end;
-      width: 80px;
-      flex: 0 0 80px;
+  width: var(--white-key-width);
+  flex: 0 0 var(--white-key-width);
       height: 100%;
       background: linear-gradient(180deg,var(--key-white) 0%, #e9eef3 96%);
       border: 1px solid var(--key-white-edge);
       border-top: 1px solid #f8fafc;
       border-radius: 0 0 18px 18px;
-      margin: 0 1px;
+  margin: 0; /* spacing handled by flex gap */
       font-size: .85rem;
       font-weight: 500;
       color: var(--text-dim);
@@ -304,6 +308,25 @@
     }
     body.dark-mode .note-grid-line { opacity: .5; }
     .note-grid-line.root { background: var(--primary); opacity: .9; box-shadow: 0 0 0 1px var(--primary-glow); }
+  /* Frequency labels for white key grid lines */
+    .note-grid-label {
+      position: absolute;
+      top: 4px;
+      font-size: 10px;
+      font-weight: 500;
+      color: var(--text-dim);
+      background: var(--bg-alt); /* solid background */
+      padding: 2px 4px 2px;
+      border-radius: 4px;
+      border: 1px solid var(--border);
+      transform: translateX(-50%);
+      pointer-events: none;
+      line-height: 1;
+      white-space: nowrap;
+  z-index: 25; /* above timeline canvas dots */
+      opacity: 1; /* ensure fully opaque */
+    }
+    body.dark-mode .note-grid-label { background: #1f252c; color: var(--text-dim); }
   /* (Labels removed as requested) */
 
     .helper-text { font-size: .82rem; color: var(--text-dim); line-height: 1.4; }
@@ -321,11 +344,9 @@
       .display-grid { grid-template-columns: repeat(auto-fit,minmax(140px,1fr)); }
       .metric { min-height: 96px; }
       header { flex-wrap: wrap; gap: .75rem 1rem; }
-  #piano, #piano-grid { width: 2000px; }
     }
     @media (max-width: 560px) {
-  #piano, #piano-grid { width: 1700px; }
-      .white-key { width: 64px; flex: 0 0 64px; }
+  :root { --white-key-width: 64px; }
     }
 
   /* (Removed recent pitch timeline styles) */
@@ -425,6 +446,25 @@
       requestAnimationFrame(positionBlackKeys);
   // After layout, draw vertical grid lines
   requestAnimationFrame(drawPianoGridLines);
+      // After initial layout, compute and apply dynamic widths
+      requestAnimationFrame(applyDynamicPianoWidth);
+    }
+
+    function applyDynamicPianoWidth() {
+      const gridContainer = document.getElementById('piano-grid');
+      if (!gridContainer || !whiteKeyElems.length) return;
+      const style = getComputedStyle(document.documentElement);
+      const keyW = parseFloat(style.getPropertyValue('--white-key-width'));
+      const gap = parseFloat(style.getPropertyValue('--piano-key-gap'));
+      const whiteCount = whiteKeyElems.length;
+      // Total width = sum(white widths) + gaps between them
+      const totalWidth = whiteCount * keyW + (whiteCount - 1) * gap;
+      gridContainer.style.width = totalWidth + 'px';
+      pianoElem.style.width = totalWidth + 'px';
+      // Resize canvas to new width
+      resizePianoTimelineCanvas();
+      // Redraw grid lines with updated positions
+      drawPianoGridLines();
     }
 
     function positionBlackKeys() {
@@ -472,21 +512,42 @@
       const gridContainer = document.getElementById('piano-grid');
       if (!gridContainer) return;
       gridContainer.querySelectorAll('.note-grid-line').forEach(el => el.remove());
+      gridContainer.querySelectorAll('.note-grid-label').forEach(el => el.remove());
       if (!whiteKeyElems.length) return;
       const positions = {};
-      whiteKeyElems.forEach(k => { positions[k.dataset.note] = k.offsetLeft + k.offsetWidth/2; });
-      pianoElem.querySelectorAll('.black-key').forEach(k => {
-        const left = parseFloat(k.style.left) || 0;
-        positions[k.dataset.note] = left;
+      const gridRect = gridContainer.getBoundingClientRect();
+      // Use precise center based on DOM layout so margins/padding don't offset lines
+      whiteKeyElems.forEach(k => {
+        const r = k.getBoundingClientRect();
+        const center = (r.left - gridRect.left) + r.width / 2;
+        positions[k.dataset.note] = center;
       });
+      pianoElem.querySelectorAll('.black-key').forEach(k => {
+        const r = k.getBoundingClientRect();
+        const center = (r.left - gridRect.left) + r.width / 2;
+        positions[k.dataset.note] = center;
+      });
+      // Draw lines for all notes (white and black) centered precisely
       pianoNotes.forEach(note => {
         const x = positions[note];
         if (x == null) return;
+        noteXPositions[note] = x; // persist for interpolation
         const line = document.createElement('div');
         line.className = 'note-grid-line' + (note.endsWith('C') ? ' root' : '');
         line.style.left = x + 'px';
         gridContainer.appendChild(line);
-  noteXPositions[note] = x; // persist for freq interpolation
+        // Add frequency label only for white keys
+        if (!note.includes('#')) {
+          const freq = pianoNoteToFreq(note);
+          if (freq) {
+            const label = document.createElement('div');
+            label.className = 'note-grid-label';
+            label.setAttribute('aria-hidden','true');
+            label.style.left = x + 'px';
+            label.textContent = freq.toFixed(2); // two decimals, no unit
+            gridContainer.appendChild(label);
+          }
+        }
       });
     }
 
@@ -498,6 +559,7 @@
         // Only reposition (no need to rebuild whites) unless count changed
         positionBlackKeys();
   drawPianoGridLines();
+  applyDynamicPianoWidth();
       }, 60);
     }
     window.addEventListener('resize', handleResize);
@@ -519,15 +581,6 @@
       });
   // Keep grid lines above/below correct stacking by redrawing (cheap)
   drawPianoGridLines();
-      // Add to piano overlay history when we commit an active note (exclude '--')
-      if (noteName && noteName !== '--') {
-  // Prefer last raw freq if it quantizes to same note, else center frequency
-  let freq = (lastRawFreq && freqToNote(lastRawFreq) === noteName) ? lastRawFreq : pianoNoteToFreq(noteName);
-        if (freq) {
-          const now = performance.now()/1000;
-          pianoHistory.push({ note: noteName, freq, time: now });
-        }
-      }
       if (targetKey && pianoScrollElem) {
         const keyLeft = targetKey.offsetLeft;
         const keyWidth = targetKey.offsetWidth;
@@ -641,8 +694,13 @@
         if (lower < 0 || upper >= orderedFreqs.length) return null;
         const f1 = orderedFreqs[lower], f2 = orderedFreqs[upper];
         const x1 = orderedXs[lower], x2 = orderedXs[upper];
-        const ratio = (f - f1) / (f2 - f1);
-        return x1 + (x2 - x1) * ratio + 0.5; // add 0.5 for crisp alignment
+  // Use logarithmic (pitch-space) interpolation so dot position reflects cents
+  // distance between the two surrounding semitone centers, regardless of the
+  // unequal *visual* spacing caused by white/black key geometry.
+  // Each semitone is a constant ratio (2^(1/12)); so ratio of log2 values gives
+  // fractional semitone without snapping.
+  const ratio = (Math.log2(f / f1)) / (Math.log2(f2 / f1)); // 0..1
+  return x1 + (x2 - x1) * ratio + 0.5; // add 0.5 for crisp alignment
       }
       // Visual settings
       const primary = getComputedStyle(document.body).getPropertyValue('--primary').trim();
@@ -749,11 +807,10 @@
                 }
               }
             }
-            // Continuous emission for piano overlay (adaptive interval retained constant)
+            // Continuous emission for piano overlay using RAW frequency (no snapping)
             const nowSec = now / 1000;
-            if (currentActiveNote !== '--' && (nowSec - lastPianoDotEmit) >= dynamicEmissionInterval) {
-              const freq = lastRawFreq || pianoNoteToFreq(currentActiveNote);
-              if (freq) pianoHistory.push({ note: currentActiveNote, freq, time: nowSec });
+            if (freq && (nowSec - lastPianoDotEmit) >= dynamicEmissionInterval) {
+              pianoHistory.push({ note: detectedNote, freq, time: nowSec });
               lastPianoDotEmit = nowSec;
             }
           animationId = requestAnimationFrame(update);
