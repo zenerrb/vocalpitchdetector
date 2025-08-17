@@ -397,8 +397,8 @@
     const pianoElem = document.getElementById('piano');
     const darkToggle = document.getElementById('darkToggle');
     let audioContext, analyser, dataArray, source, stream, listening = false, animationId;
-    let currentActiveNote = '--';
-  let lastRawFreq = null; // last detected (un-quantized) frequency
+  let currentActiveNote = '--';
+  // Removed lastRawFreq (was unused beyond assignment)
   let lastPianoDotEmit = 0; // throttle for piano overlay
   // Piano overlay history
   const PIANO_HISTORY_SECONDS = 5;
@@ -430,8 +430,8 @@
     });
 
     // Piano keys full 88-key range: A0 through C8
-    const pianoNotes = [];
-    const noteNames = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B']; // semitone names
+  const pianoNotes = [];
+  const noteNames = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B']; // semitone names (shared for conversions)
     // MIDI numbers: A0 = 21, C8 = 108
     for (let midi = 21; midi <= 108; midi++) {
       const name = noteNames[midi % 12];
@@ -511,8 +511,8 @@
       drawPianoGridLines();
     }
 
-    // Utility: compute frequency from note name (reuse later too)
-    function pianoNoteToFreq(note) {
+  // Frequency from note name (A4 = 440 Hz)
+  function pianoNoteToFreq(note) {
       const m = note.match(/^([A-G]#?)(\d)$/);
       if (!m) return null;
       const name = m[1];
@@ -610,33 +610,16 @@
   // (Timeline event & auto-scroll removed)
     }
 
-    // Note frequencies (A0 to C8)
-    const notes = [
-      'C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'
-    ];
     function freqToNote(frequency) {
       if (!frequency || frequency < 27.5 || frequency > 4186) return '--';
       const A4 = 440;
       const n = Math.round(12 * Math.log2(frequency / A4));
       // Ensure noteIndex is always positive
-      const noteIndex = ((n + 9) % 12 + 12) % 12;
+      const noteIndex = ((n + 9) % 12 + 12) % 12; // align with noteNames indices
       const octave = 4 + Math.floor((n + 9) / 12);
-      return notes[noteIndex] + octave;
+      return noteNames[noteIndex] + octave;
     }
-
-    // (Removed recent pitch timeline implementation)
-    function noteToFrequency(note) { // still used for piano overlay
-      const match = note.match(/^([A-G]#?)(\d)$/);
-      if (!match) return null;
-      const name = match[1];
-      const octave = parseInt(match[2], 10);
-      const A4 = 440;
-      const noteIndex = notes.indexOf(name);
-      const semitoneFromA4 = (octave - 4) * 12 + (noteIndex - 9);
-      return A4 * Math.pow(2, semitoneFromA4 / 12);
-    }
-    const HISTORY_SECONDS = 5; // retain for piano overlay age calculations
-    let dynamicEmissionInterval = 0.02; // fixed emission interval without timeline width adaptation
+    const HISTORY_SECONDS = 5; // retained for overlay age calculations
 
   /* ================= Piano Overlay History (bottom -> now, rising up) ================= */
     function ensurePianoTimelineCanvas() {
@@ -798,7 +781,6 @@
           if (!listening) return;
           analyser.getFloatTimeDomainData(dataArray);
             const freq = autoCorrelate(dataArray, audioContext.sampleRate);
-            lastRawFreq = freq || lastRawFreq; // retain last valid raw freq if current null
             const detectedNote = freqToNote(freq);
             const now = performance.now();
 
@@ -824,7 +806,7 @@
             }
             // Continuous emission for piano overlay using RAW frequency (no snapping)
             const nowSec = now / 1000;
-            if (freq && (nowSec - lastPianoDotEmit) >= dynamicEmissionInterval) {
+            if (freq && (nowSec - lastPianoDotEmit) >= 0.02) { // ~50 FPS max emission
               pianoHistory.push({ note: detectedNote, freq, time: nowSec });
               lastPianoDotEmit = nowSec;
             }

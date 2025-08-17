@@ -1,25 +1,31 @@
-# Vocal Pitch Detector
+## Vocal Pitch Detector
 
-This project is a web-based vocal pitch detector with a visual piano keyboard. It allows users to detect the pitch of their voice in real time and highlights the corresponding piano key.
+Single‑page web app that listens to your microphone and highlights the nearest piano key (full 88‑key range A0–C8) in real time. A faint trail of recent detected pitches (unsnapped raw frequencies) is rendered as dots rising over the keyboard for quick visual pitch drift feedback.
 
-A live demo can be found at: [https://zenerrb.github.io/vocalpitchdetector/](https://zenerrb.github.io/vocalpitchdetector/)
+Demo: https://zenerrb.github.io/vocalpitchdetector/
 
-## Features
-- Real-time pitch detection using the browser microphone
-- Visual piano keyboard (C2 to C6)
-- Highlights the detected note on the piano
-- Responsive vertical resizing
-- Horizontal scrolling for the full keyboard
+### Current Features
+* Real‑time pitch detection (autocorrelation) in the browser – no backend.
+* Full 88‑key virtual piano with smooth horizontal scrolling.
+* Sticky note highlighting (short debounce reduces flicker on noisy input).
+* Raw frequency dot overlay (log‑interpolated between semitones) for micro‑intonation visualization.
+* Dark / light theme toggle with preference persistence.
+* Responsive layout; touch + mouse scroll friendly.
 
-## Usage
-1. Open `index.html` in a modern web browser.
-2. Click "Start Listening" to allow microphone access.
-3. Sing or play a note; the detected pitch and note will be displayed and highlighted on the piano.
+### Use It
+1. Open `index.html` locally (or visit the demo URL).
+2. Press Start and allow microphone access.
+3. Sing / play – the active key lights; dots show recent pitch history.
+4. Press Stop to release the mic.
 
-## Requirements
-- Modern browser (Chrome, Edge, Firefox, etc.)
-- Microphone access
+### Tech Notes
+* Plain HTML/CSS/JS (no build step, no dependencies).
+* Autocorrelation is intentionally simple (good for monophonic voice); swap in YIN/AMDF/etc. if you need more robustness.
+* Overlay uses requestAnimationFrame; emission capped (~50 Hz) to balance smoothness and CPU.
 
-## File Structure
-- `index.html` — Main application file
+### File
+* `index.html` – entire app.
+
+### License
+MIT (feel free to adapt / extend).
 
