@@ -290,6 +290,25 @@
       #piano { width: 1700px; }
       .white-key { width: 64px; flex: 0 0 64px; }
     }
+
+    /* Timeline (5s history) */
+    #timeline-wrapper { position: relative; }
+    #timeline-container {
+      position: relative;
+      height: clamp(320px,46vh,520px);
+      width: 100%;
+      overflow-y: auto;
+      overscroll-behavior: contain;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: linear-gradient(180deg,var(--bg-alt),var(--bg) 140%);
+    }
+    #noteTimeline { width: 100%; height: 100%; display: block; user-select: none; touch-action: none; }
+  /* Vertical scrollbar styling to match piano horizontal */
+  #timeline-container::-webkit-scrollbar { width: 14px; }
+  #timeline-container::-webkit-scrollbar-track { background: transparent; }
+  #timeline-container::-webkit-scrollbar-thumb { background: #b8c6d4; border-radius: 100px; border: 3px solid var(--bg-alt); }
+  body.dark-mode #timeline-container::-webkit-scrollbar-thumb { background:#465563; border-color: #1d252d; }
   </style>
 </head>
 <body>
@@ -307,6 +326,11 @@
         <div id="piano" role="group" aria-label="Virtual piano keyboard"></div>
       </div>
     </section>
+    <section class="panel" aria-label="Recent pitch timeline" id="timeline-wrapper">
+      <div id="timeline-container">
+        <canvas id="noteTimeline" aria-label="5 second note history visualization"></canvas>
+      </div>
+    </section>
     <footer class="helper-text" style="text-align:center; margin-top:auto; padding-bottom:2rem;">
       <span>Pitch highlighting active. Start to detect; Stop to release microphone.</span>
     </footer>
@@ -319,6 +343,8 @@
     const darkToggle = document.getElementById('darkToggle');
     let audioContext, analyser, dataArray, source, stream, listening = false, animationId;
     let currentActiveNote = '--';
+  let lastDotEmit = 0; // seconds timestamp for timeline dot throttling
+  let lastRawFreq = null; // last detected (un-quantized) frequency
 
     // Dark mode persistence
     const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
@@ -436,6 +462,12 @@
           pianoScrollElem.scrollTo({ left: targetScroll, behavior: 'smooth' });
         }
       }
+  // Add a new event to history for timeline (actual note, not '--')
+  if (noteName && noteName !== '--') pushNoteEvent(noteName);
+      // Auto-scroll timeline vertically to keep current note in view
+      if (noteName && noteName !== '--') {
+        requestAnimationFrame(() => scrollTimelineToNote(noteName));
+      }
     }
 
     // Note frequencies (A0 to C8)
@@ -451,6 +483,173 @@
       const octave = 4 + Math.floor((n + 9) / 12);
       return notes[noteIndex] + octave;
     }
+
+    /* ================= Timeline (5 second scrolling note history) ================= */
+    const timelineCanvas = document.getElementById('noteTimeline');
+    const timelineCtx = timelineCanvas.getContext('2d');
+    const HISTORY_SECONDS = 5;
+    const timelineNotes = []; // Will hold all note names (C2..C6) vertically
+    for (let octave = 2; octave <= 6; octave++) {
+      for (const n of notes) {
+        const note = n + octave;
+        timelineNotes.push(note);
+        if (note === 'C6') break; // stop at C6 inclusive
+      }
+      if (timelineNotes[timelineNotes.length - 1] === 'C6') break;
+    }
+    // Precompute frequencies for each timeline note for precise vertical scaling
+    function noteToFrequency(note) {
+      const match = note.match(/^([A-G]#?)(\d)$/);
+      if (!match) return null;
+      const name = match[1];
+      const octave = parseInt(match[2], 10);
+      const A4 = 440;
+      const noteIndex = notes.indexOf(name);
+      const semitoneFromA4 = (octave - 4) * 12 + (noteIndex - 9); // A4 index 9
+      return A4 * Math.pow(2, semitoneFromA4 / 12);
+    }
+  // note frequencies retained for potential future precise mapping (currently row-based)
+  const noteFreqs = timelineNotes.map(noteToFrequency);
+
+    function scrollTimelineToNote(note) {
+      const container = document.getElementById('timeline-container');
+      if (!container) return;
+      const idx = timelineNotes.indexOf(note);
+      if (idx === -1) return;
+  const totalHeight = timelineNotes.length * TIMELINE_CONFIG.rowHeight;
+  // Map note's frequency via same log mapping used in draw
+  const noteFreq = noteToFrequency(note);
+  const minDisplayFreq = noteToFrequency('C2');
+  const maxDisplayFreq = noteToFrequency('C6');
+  const logMin = Math.log(minDisplayFreq);
+  const logMax = Math.log(maxDisplayFreq);
+  const ratio = (Math.log(noteFreq) - logMin) / (logMax - logMin);
+  const y = totalHeight - ratio * totalHeight; // same as freqToY
+  const targetScrollTop = Math.min(Math.max(y - container.clientHeight / 2, 0), totalHeight - container.clientHeight);
+      // Only scroll if outside comfortable viewport bounds (e.g., 15% padding)
+      const padding = container.clientHeight * 0.15;
+  if (y < container.scrollTop + padding || y > container.scrollTop + container.clientHeight - padding) {
+        container.scrollTo({ top: targetScrollTop, behavior: 'smooth' });
+      }
+    }
+
+    let noteEvents = []; // {note, time, freq}
+
+    function pushNoteEvent(note, rawFreqOverride) {
+      const now = performance.now() / 1000; // seconds
+      // Use provided raw frequency if valid; else derive from note (center frequency)
+      let freq = (rawFreqOverride && rawFreqOverride > 0) ? rawFreqOverride : noteToFrequency(note);
+      if (!freq) return;
+      // Clamp frequency range to timeline range
+      const minDisplay = noteToFrequency('C2');
+      const maxDisplay = noteToFrequency('C6');
+      if (freq < minDisplay || freq > maxDisplay) return;
+      noteEvents.push({ note, time: now, freq });
+      pruneEvents(now);
+    }
+    function pruneEvents(nowSec) {
+      const cutoff = nowSec - HISTORY_SECONDS;
+      // Keep events newer than cutoff
+      while (noteEvents.length && noteEvents[0].time < cutoff) noteEvents.shift();
+    }
+
+    // Timeline sizing config
+    const TIMELINE_CONFIG = {
+      rowHeight: 48,          // px per note row (increase for "wider" bands)
+      dotRadius: 5,           // radius of dots (even smaller)
+      emissionInterval: 0.025 // seconds between dots (~40/sec)
+    };
+
+    function resizeTimeline() {
+      const container = document.getElementById('timeline-container');
+      const rect = container.getBoundingClientRect();
+      // Give ample vertical resolution for frequency lines: proportional to note count * rowHeight
+      const totalHeight = timelineNotes.length * TIMELINE_CONFIG.rowHeight;
+      timelineCanvas.style.height = totalHeight + 'px';
+      const dpr = window.devicePixelRatio || 1;
+      timelineCanvas.width = rect.width * dpr;
+      timelineCanvas.height = totalHeight * dpr;
+      timelineCtx.setTransform(1,0,0,1,0,0);
+      timelineCtx.scale(dpr, dpr);
+    }
+    window.addEventListener('resize', resizeTimeline);
+    resizeTimeline();
+
+    function drawTimeline() {
+      const now = performance.now() / 1000;
+      pruneEvents(now);
+  const w = timelineCanvas.clientWidth;
+  const h = timelineCanvas.clientHeight;
+  timelineCtx.clearRect(0, 0, w, h);
+      // Background gradient subtle
+      const bgGrad = timelineCtx.createLinearGradient(0,0,0,h);
+      bgGrad.addColorStop(0, getComputedStyle(document.body).getPropertyValue('--bg-alt').trim());
+      bgGrad.addColorStop(1, getComputedStyle(document.body).getPropertyValue('--bg').trim());
+      timelineCtx.fillStyle = bgGrad;
+      timelineCtx.fillRect(0,0,w,h);
+
+      // Draw horizontal grid lines for each note (optional subset to reduce clutter)
+      timelineCtx.font = '11px "Inter", system-ui';
+      timelineCtx.textBaseline = 'middle';
+      const lineColor = getComputedStyle(document.body).getPropertyValue('--border').trim();
+      const textColor = getComputedStyle(document.body).getPropertyValue('--text-dim').trim();
+      timelineCtx.strokeStyle = lineColor;
+      timelineCtx.lineWidth = 1;
+
+      // Continuous frequency scale using log mapping between C2 and C6
+      const minDisplayFreq = noteToFrequency('C2');
+      const maxDisplayFreq = noteToFrequency('C6');
+      const logMin = Math.log(minDisplayFreq);
+      const logMax = Math.log(maxDisplayFreq);
+      function freqToY(f) {
+        const clamped = Math.min(Math.max(f, minDisplayFreq), maxDisplayFreq);
+        const ratio = (Math.log(clamped) - logMin) / (logMax - logMin);
+        return h - ratio * h; // low freq bottom, high top
+      }
+      const rowHeight = TIMELINE_CONFIG.rowHeight;
+
+      timelineCtx.beginPath();
+      // Draw horizontal reference lines for each note position
+      timelineNotes.forEach(note => {
+        const f = noteToFrequency(note);
+        const y = freqToY(f);
+        timelineCtx.strokeStyle = lineColor;
+        timelineCtx.lineWidth = 1;
+        timelineCtx.beginPath();
+        timelineCtx.moveTo(0, y + 0.5);
+        timelineCtx.lineTo(w, y + 0.5);
+        timelineCtx.stroke();
+        timelineCtx.fillStyle = textColor;
+        timelineCtx.fillText(note, 6, y - 8); // slightly above line
+      });
+
+      // Time axis: right = now, left = now - HISTORY_SECONDS
+      const primaryColor = getComputedStyle(document.body).getPropertyValue('--primary').trim();
+      const glow = getComputedStyle(document.body).getPropertyValue('--primary-glow').trim();
+      // Draw events as circles that move left over time
+      noteEvents.forEach(evt => {
+        const age = now - evt.time; // 0..HISTORY_SECONDS
+        if (age < 0 || age > HISTORY_SECONDS) return;
+        const x = w - (age / HISTORY_SECONDS) * w;
+        const y = freqToY(evt.freq);
+        const fade = 1 - age / HISTORY_SECONDS; // fade out
+        const radius = TIMELINE_CONFIG.dotRadius; // bigger dots
+        const grd = timelineCtx.createRadialGradient(x,y,0,x,y,radius);
+        grd.addColorStop(0, primaryColor + '');
+        grd.addColorStop(1, glow + '55');
+        timelineCtx.globalAlpha = Math.max(.2, fade);
+        timelineCtx.fillStyle = grd;
+        timelineCtx.beginPath();
+        timelineCtx.arc(x, y, radius, 0, Math.PI*2);
+        timelineCtx.fill();
+        timelineCtx.globalAlpha = 1;
+      });
+
+  // (Removed current time vertical line per request)
+
+      requestAnimationFrame(drawTimeline);
+    }
+    drawTimeline();
 
     function autoCorrelate(buf, sampleRate) {
       // Simple autocorrelation
@@ -505,6 +704,7 @@
           if (!listening) return;
           analyser.getFloatTimeDomainData(dataArray);
             const freq = autoCorrelate(dataArray, audioContext.sampleRate);
+            lastRawFreq = freq || lastRawFreq; // retain last valid raw freq if current null
             const detectedNote = freqToNote(freq);
             const now = performance.now();
 
@@ -528,6 +728,12 @@
                 }
               }
             }
+            // Continuous emission of timeline dots for sustained active note
+            const nowSec = now / 1000;
+            if (currentActiveNote !== '--' && (nowSec - lastDotEmit) >= TIMELINE_CONFIG.emissionInterval) { // adjustable rate
+              pushNoteEvent(currentActiveNote, lastRawFreq);
+              lastDotEmit = nowSec;
+            }
           animationId = requestAnimationFrame(update);
         }
         update();
@@ -546,6 +752,9 @@
       if (audioContext) { audioContext.close(); audioContext = null; }
       if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; }
       highlightPiano('--');
+  // Clear timeline events when stopping
+  noteEvents.length = 0;
+  lastDotEmit = 0;
       startBtn.disabled = false;
       stopBtn.disabled = true;
     }
