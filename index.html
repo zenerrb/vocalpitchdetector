@@ -38,6 +38,13 @@
   /* Piano sizing variables */
   --white-key-width: 80px;
   --piano-key-gap: 2px; /* spacing between white keys */
+  /* Piano appearance */
+  --white-key-bg: linear-gradient(180deg,var(--key-white) 0%, #e9eef3 96%);
+  --white-key-bg-active: var(--highlight-white);
+  --black-key-bg: linear-gradient(175deg,#242b32,#0d1114 80%);
+  --black-key-bg-active: var(--highlight-black);
+  --black-key-border: #0b0f12;
+  --white-key-top-highlight: #f8fafc;
     }
     body.dark-mode {
       --bg: #0f1215;
@@ -50,6 +57,12 @@
       --key-white: #f3f6f9;
       --key-white-edge: #5a6673;
       --key-black: #070a0d;
+  --white-key-bg: linear-gradient(185deg,#424d58 0%, #313a42 85%);
+  --white-key-bg-active: linear-gradient(175deg,#55c8ff,#1a8fff 60%,#0073ff);
+  --black-key-bg: linear-gradient(175deg,#2f3942,#12171b 80%);
+  --black-key-bg-active: linear-gradient(145deg,#27c3ff,#1787ff 60%,#0068ff);
+  --black-key-border: #1c242b;
+  --white-key-top-highlight: #5c6670;
     }
 
     * { box-sizing: border-box; }
@@ -244,9 +257,9 @@
   width: var(--white-key-width);
   flex: 0 0 var(--white-key-width);
       height: 100%;
-      background: linear-gradient(180deg,var(--key-white) 0%, #e9eef3 96%);
-      border: 1px solid var(--key-white-edge);
-      border-top: 1px solid #f8fafc;
+  background: var(--white-key-bg);
+  border: 1px solid var(--key-white-edge);
+  border-top: 1px solid var(--white-key-top-highlight);
       border-radius: 0 0 18px 18px;
   margin: 0; /* spacing handled by flex gap */
       font-size: .85rem;
@@ -260,11 +273,13 @@
     .white-key span { position: absolute; bottom: 8px; left: 50%; transform: translateX(-50%); pointer-events: none; }
     .white-key:active { transform: translateY(2px); }
     .white-key.active {
-      background: var(--highlight-white);
+      background: var(--white-key-bg-active);
       color: #06314d;
       box-shadow: 0 0 0 1px #117ebf, 0 4px 14px -3px rgba(0,132,255,.55), 0 0 0 3px #0a84ff40;
       z-index: 15;
     }
+    body.dark-mode .white-key { box-shadow: inset 0 0 0 1px #56616b, 0 4px 8px -3px rgba(0,0,0,.55); color: var(--text-dim); }
+    body.dark-mode .white-key.active { color:#eef6ff; box-shadow: 0 0 0 1px #1787ff, 0 4px 16px -3px rgba(0,120,255,.7), 0 0 0 3px #0a84ff33; }
 
     .black-key {
       position: absolute;
@@ -273,8 +288,8 @@
       width: 48px;
       height: 60%;
       min-height: 100px;
-      background: linear-gradient(175deg,#242b32,#0d1114 80%);
-      border: 1px solid #0b0f12;
+  background: var(--black-key-bg);
+  border: 1px solid var(--black-key-border);
       border-radius: 0 0 12px 12px;
       cursor: pointer;
       z-index: 25;
@@ -291,10 +306,12 @@
     }
     .black-key:active { transform: translateX(-50%) translateY(2px); }
     .black-key.active {
-      background: var(--highlight-black);
+      background: var(--black-key-bg-active);
       color: #eef6ff;
       box-shadow: 0 0 0 1px #1787ff, 0 4px 16px -3px rgba(0,120,255,.7), 0 0 0 3px #0a84ff33;
     }
+    body.dark-mode .black-key { box-shadow: inset 0 0 0 1px #37424c, 0 4px 10px -3px rgba(0,0,0,.7); color:#d4dde5; }
+    body.dark-mode .black-key.active { color:#fff; }
 
     /* Piano vertical frequency grid */
     .note-grid-line {
