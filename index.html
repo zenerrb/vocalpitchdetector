@@ -353,9 +353,33 @@
     .mode-indicator { font-size: .7rem; letter-spacing: 1.5px; font-weight: 600; opacity: .75; }
     .spacer { flex: 1 1 auto; }
     .toolbar { display: flex; gap:.6rem; align-items: center; }
-    .toggle-dark { --btn-bg: var(--bg-alt); --btn-bg-hover:#e2e9f1; --btn-bg-active:#d4dde6; color: var(--text-dim); border-color: var(--border); }
-    body.dark-mode .toggle-dark { --btn-bg:#232b33; --btn-bg-hover:#2c3540; --btn-bg-active:#1f2730; color:#d4dde5; }
-    .toggle-dark[aria-pressed="true"] { box-shadow: 0 0 0 1px var(--primary), 0 0 0 4px #0a84ff33; color: var(--primary); }
+    /* Settings gear + popover */
+    .settings { position: relative; }
+  .settings-trigger { line-height:1.1; padding:.8rem 1.3rem .85rem; }
+    .settings-menu {
+      position: absolute;
+      top: 100%;
+      left: 0;
+      display: flex;
+      flex-direction: column;
+      gap: .5rem;
+      margin-top: .55rem;
+      background: var(--bg-alt);
+      border: 1px solid var(--border);
+      padding: .75rem .85rem;
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      min-width: 170px;
+      z-index: 80;
+      animation: fadeSlide var(--transition-fast);
+    }
+    .settings-menu button { width: 100%; justify-content: flex-start; }
+  .settings-menu[hidden] { display: none !important; }
+  /* When near right edge, flip alignment */
+  .settings-menu.align-right { left: auto; right: 0; }
+    @keyframes fadeSlide { from { opacity:0; transform:translateY(-4px); } to { opacity:1; transform:translateY(0); } }
+    @media (max-width: 640px) { .settings-menu { left:auto; right:0; } }
+  /* Removed custom toggle-dark styles so theme button matches standard secondary button */
 
     @media (max-width: 880px) {
       #app { padding-top: 1rem; }
@@ -396,10 +420,15 @@
   <header>
     <h1 aria-label="App title">Vocal Pitch Detector</h1>
     <div class="toolbar" role="toolbar" aria-label="Display controls">
-      <button id="darkToggle" class="toggle-dark btn-secondary" type="button" aria-pressed="false" title="Toggle dark mode">🌙</button>
-  <button id="fsToggle" class="btn-secondary" type="button" aria-pressed="false" title="Enter fullscreen" aria-label="Enter fullscreen">⛶</button>
       <button id="start" type="button">Start</button>
       <button id="stop" type="button" disabled>Stop</button>
+      <div class="settings">
+        <button id="settingsTrigger" class="btn-secondary settings-trigger" type="button" aria-haspopup="true" aria-expanded="false" aria-controls="settingsMenu" title="Settings" aria-label="Display settings">⚙️</button>
+        <div id="settingsMenu" class="settings-menu" role="menu" hidden>
+          <button id="darkToggle" class="btn-secondary" type="button" aria-pressed="false" title="Toggle dark mode" role="menuitem">Dark Mode</button>
+          <button id="fsToggle" class="btn-secondary" type="button" aria-pressed="false" title="Enter fullscreen" aria-label="Enter fullscreen" role="menuitem">Fullscreen Mode</button>
+        </div>
+      </div>
     </div>
   </header>
   <main id="app" tabindex="-1">
@@ -411,7 +440,7 @@
     </section>
   <!-- Recent pitch timeline section removed -->
     <footer class="helper-text" style="text-align:center; margin-top:auto; padding-bottom:2rem;">
-      <span>Pitch highlighting active. Start to detect; Stop to release microphone.</span>
+      <span>Press Start to begin. Press Stop to end.</span>
     </footer>
   </main>
   <script>
@@ -419,8 +448,53 @@
     const startBtn = document.getElementById('start');
     const stopBtn = document.getElementById('stop');
     const pianoElem = document.getElementById('piano');
+    const settingsTrigger = document.getElementById('settingsTrigger');
+    const settingsMenu = document.getElementById('settingsMenu');
     const darkToggle = document.getElementById('darkToggle');
-  const fsToggle = document.getElementById('fsToggle');
+    const fsToggle = document.getElementById('fsToggle');
+    function openSettingsMenu() {
+      if (!settingsMenu.hidden) return;
+      settingsMenu.hidden = false;
+      settingsTrigger.setAttribute('aria-expanded','true');
+      // After layout, reposition if overflowing right, then focus first item for accessibility
+      requestAnimationFrame(() => {
+        settingsMenu.classList.remove('align-right');
+        const rect = settingsMenu.getBoundingClientRect();
+        if (rect.right > window.innerWidth - 4) {
+          settingsMenu.classList.add('align-right');
+        }
+        darkToggle?.focus();
+      });
+      document.addEventListener('mousedown', handleOutsideSettingsClick);
+      document.addEventListener('keydown', handleSettingsKey);
+    }
+    function closeSettingsMenu() {
+      if (settingsMenu.hidden) return;
+      settingsMenu.hidden = true;
+      settingsTrigger.setAttribute('aria-expanded','false');
+      document.removeEventListener('mousedown', handleOutsideSettingsClick);
+      document.removeEventListener('keydown', handleSettingsKey);
+    }
+    function handleOutsideSettingsClick(e) {
+      if (!settingsMenu.contains(e.target) && e.target !== settingsTrigger) closeSettingsMenu();
+    }
+    function handleSettingsKey(e) {
+      if (e.key === 'Escape') { closeSettingsMenu(); settingsTrigger.focus(); }
+      // basic up/down focus cycling
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        const focusable = Array.from(settingsMenu.querySelectorAll('button'));
+        if (!focusable.length) return;
+        const dir = e.key === 'ArrowDown' ? 1 : -1;
+        const idx = focusable.indexOf(document.activeElement);
+        let next = idx + dir;
+        if (next < 0) next = focusable.length - 1; else if (next >= focusable.length) next = 0;
+        focusable[next].focus();
+        e.preventDefault();
+      }
+    }
+    settingsTrigger.addEventListener('click', () => {
+      if (settingsMenu.hidden) openSettingsMenu(); else closeSettingsMenu();
+    });
     let audioContext, analyser, dataArray, source, stream, listening = false, animationId;
   let currentActiveNote = '--';
   // Removed lastRawFreq (was unused beyond assignment)
@@ -439,19 +513,22 @@
     }
     function updateThemeToggleLabel() {
       const isDark = document.body.classList.contains('dark-mode');
-      // Show label indicating the target theme when clicked OR current theme? We'll show target for clarity
-      darkToggle.textContent = isDark ? 'Light Mode' : 'Dark Mode';
-      darkToggle.title = isDark ? 'Switch to light mode' : 'Switch to dark mode';
-      darkToggle.setAttribute('aria-label', darkToggle.title);
+  // Show plain text indicating the target theme (what clicking will switch to)
+  darkToggle.textContent = isDark ? 'Light Mode' : 'Dark Mode';
+  darkToggle.title = isDark ? 'Switch to light mode' : 'Switch to dark mode';
+  darkToggle.setAttribute('aria-label', darkToggle.title);
     }
     updateThemeToggleLabel();
     darkToggle.addEventListener('click', () => {
       const isDark = document.body.classList.toggle('dark-mode');
-      darkToggle.setAttribute('aria-pressed', String(isDark));
+  // Keep aria-pressed for accessibility state, but it no longer affects styling
+  darkToggle.setAttribute('aria-pressed', String(isDark));
       localStorage.setItem('vpd-theme', isDark ? 'dark' : 'light');
       updateThemeToggleLabel();
   // Repaint piano grid to ensure colors (opacity) match theme
   drawPianoGridLines();
+  // Close the settings menu after action
+  closeSettingsMenu();
     });
 
     // Fullscreen toggle
@@ -469,7 +546,8 @@
       fsToggle.setAttribute('aria-pressed', String(active));
       fsToggle.title = active ? 'Exit fullscreen' : 'Enter fullscreen';
       fsToggle.setAttribute('aria-label', fsToggle.title);
-      fsToggle.textContent = active ? '⤢' : '⛶'; // different icon when active
+  // Show action label: when in fullscreen offer to go Windowed, else offer Fullscreen
+  fsToggle.textContent = active ? 'Windowed Mode' : 'Fullscreen Mode';
     }
     if (!fsSupported()) {
       fsToggle.disabled = true;
@@ -477,6 +555,8 @@
     } else {
       fsToggle.addEventListener('click', () => {
         if (isFullscreen()) exitFullscreen(); else enterFullscreen();
+        // Close menu after choosing action
+        closeSettingsMenu();
       });
       document.addEventListener('fullscreenchange', updateFsButton);
       document.addEventListener('webkitfullscreenchange', updateFsButton);
