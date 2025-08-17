@@ -397,6 +397,7 @@
     <h1 aria-label="App title">Vocal Pitch Detector</h1>
     <div class="toolbar" role="toolbar" aria-label="Display controls">
       <button id="darkToggle" class="toggle-dark btn-secondary" type="button" aria-pressed="false" title="Toggle dark mode">🌙</button>
+  <button id="fsToggle" class="btn-secondary" type="button" aria-pressed="false" title="Enter fullscreen" aria-label="Enter fullscreen">⛶</button>
       <button id="start" type="button">Start</button>
       <button id="stop" type="button" disabled>Stop</button>
     </div>
@@ -419,6 +420,7 @@
     const stopBtn = document.getElementById('stop');
     const pianoElem = document.getElementById('piano');
     const darkToggle = document.getElementById('darkToggle');
+  const fsToggle = document.getElementById('fsToggle');
     let audioContext, analyser, dataArray, source, stream, listening = false, animationId;
   let currentActiveNote = '--';
   // Removed lastRawFreq (was unused beyond assignment)
@@ -451,6 +453,36 @@
   // Repaint piano grid to ensure colors (opacity) match theme
   drawPianoGridLines();
     });
+
+    // Fullscreen toggle
+    function fsSupported() { return document.documentElement.requestFullscreen || document.documentElement.webkitRequestFullscreen || document.documentElement.msRequestFullscreen; }
+    function isFullscreen() { return document.fullscreenElement || document.webkitFullscreenElement || document.msFullscreenElement; }
+    function enterFullscreen() {
+      const el = document.documentElement;
+      (el.requestFullscreen || el.webkitRequestFullscreen || el.msRequestFullscreen)?.call(el);
+    }
+    function exitFullscreen() {
+      (document.exitFullscreen || document.webkitExitFullscreen || document.msExitFullscreen)?.call(document);
+    }
+    function updateFsButton() {
+      const active = !!isFullscreen();
+      fsToggle.setAttribute('aria-pressed', String(active));
+      fsToggle.title = active ? 'Exit fullscreen' : 'Enter fullscreen';
+      fsToggle.setAttribute('aria-label', fsToggle.title);
+      fsToggle.textContent = active ? '⤢' : '⛶'; // different icon when active
+    }
+    if (!fsSupported()) {
+      fsToggle.disabled = true;
+      fsToggle.title = 'Fullscreen not supported';
+    } else {
+      fsToggle.addEventListener('click', () => {
+        if (isFullscreen()) exitFullscreen(); else enterFullscreen();
+      });
+      document.addEventListener('fullscreenchange', updateFsButton);
+      document.addEventListener('webkitfullscreenchange', updateFsButton);
+      document.addEventListener('MSFullscreenChange', updateFsButton);
+      updateFsButton();
+    }
 
     // Piano keys full 88-key range: A0 through C8
   const pianoNotes = [];
