@@ -555,10 +555,11 @@
 
     // Timeline sizing config
     const TIMELINE_CONFIG = {
-      rowHeight: 48,          // px per note row (increase for "wider" bands)
-      dotRadius: 5,           // radius of dots (even smaller)
-      emissionInterval: 0.025 // seconds between dots (~40/sec)
+      rowHeight: 48,          // px per note row
+      dotRadius: 5,           // radius of dots
+      desiredDotSpacingPx: 2  // target horizontal pixel gap between dots
     };
+    let dynamicEmissionInterval = 0.015; // seconds; recalculated on resize
 
     function resizeTimeline() {
       const container = document.getElementById('timeline-container');
@@ -571,6 +572,14 @@
       timelineCanvas.height = totalHeight * dpr;
       timelineCtx.setTransform(1,0,0,1,0,0);
       timelineCtx.scale(dpr, dpr);
+      // Recalculate emission interval so horizontal spacing ~= desiredDotSpacingPx
+      // spacingPx = (canvasWidth / HISTORY_SECONDS) * emissionInterval  => emissionInterval = spacingPx * HISTORY_SECONDS / canvasWidth
+      const cw = timelineCanvas.clientWidth || rect.width;
+      if (cw > 0) {
+        dynamicEmissionInterval = (TIMELINE_CONFIG.desiredDotSpacingPx * HISTORY_SECONDS) / cw;
+        // Clamp to sane range
+        dynamicEmissionInterval = Math.max(0.005, Math.min(0.03, dynamicEmissionInterval));
+      }
     }
     window.addEventListener('resize', resizeTimeline);
     resizeTimeline();
@@ -630,10 +639,12 @@
       noteEvents.forEach(evt => {
         const age = now - evt.time; // 0..HISTORY_SECONDS
         if (age < 0 || age > HISTORY_SECONDS) return;
-        const x = w - (age / HISTORY_SECONDS) * w;
+  let x = w - (age / HISTORY_SECONDS) * w;
         const y = freqToY(evt.freq);
         const fade = 1 - age / HISTORY_SECONDS; // fade out
-        const radius = TIMELINE_CONFIG.dotRadius; // bigger dots
+  const radius = TIMELINE_CONFIG.dotRadius; // current dot radius
+  // Keep full dot within canvas to avoid partial accumulating slivers at the right edge
+  if (x > w - radius - 1) x = w - radius - 1;
         const grd = timelineCtx.createRadialGradient(x,y,0,x,y,radius);
         grd.addColorStop(0, primaryColor + '');
         grd.addColorStop(1, glow + '55');
@@ -730,7 +741,7 @@
             }
             // Continuous emission of timeline dots for sustained active note
             const nowSec = now / 1000;
-            if (currentActiveNote !== '--' && (nowSec - lastDotEmit) >= TIMELINE_CONFIG.emissionInterval) { // adjustable rate
+            if (currentActiveNote !== '--' && (nowSec - lastDotEmit) >= dynamicEmissionInterval) { // adaptive rate
               pushNoteEvent(currentActiveNote, lastRawFreq);
               lastDotEmit = nowSec;
             }
