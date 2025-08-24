@@ -535,6 +535,8 @@
       updateThemeToggleLabel();
   // Repaint piano grid to ensure colors (opacity) match theme
   drawPianoGridLines();
+  // GA4: theme changed
+  if (typeof gtag === 'function') { try { gtag('event', 'theme_changed', { theme: isDark ? 'dark' : 'light' }); } catch {} }
   // Close the settings menu after action
   closeSettingsMenu();
     });
@@ -562,7 +564,10 @@
       fsToggle.title = 'Fullscreen not supported';
     } else {
       fsToggle.addEventListener('click', () => {
-        if (isFullscreen()) exitFullscreen(); else enterFullscreen();
+        const action = isFullscreen() ? 'exit' : 'enter';
+        if (action === 'exit') exitFullscreen(); else enterFullscreen();
+        // GA4: fullscreen toggled
+        if (typeof gtag === 'function') { try { gtag('event', 'fullscreen_toggled', { state: action }); } catch {} }
         // Close menu after choosing action
         closeSettingsMenu();
       });
