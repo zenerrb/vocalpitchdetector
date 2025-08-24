@@ -14,7 +14,17 @@
     window.dataLayer = window.dataLayer || [];
     function gtag(){dataLayer.push(arguments);}
     gtag('js', new Date());
-    gtag('config', 'G-LRL404ZLSD');
+    // Compute initial theme early so first page_view has the user property
+    (function(){
+      try {
+        var t = localStorage.getItem('vpd-theme');
+        var prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+        var theme = (t === 'dark' || (!t && prefersDark)) ? 'dark' : 'light';
+        gtag('config', 'G-LRL404ZLSD', { user_properties: { theme: theme } });
+      } catch (e) {
+        gtag('config', 'G-LRL404ZLSD');
+      }
+    })();
   </script>
   <style>
     :root {
@@ -425,6 +435,18 @@
   </style>
 </head>
 <body>
+  <script>
+    // Apply saved theme ASAP to avoid flash and load the correct theme for returning users
+    (function(){
+      try {
+        var t = localStorage.getItem('vpd-theme');
+        var prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+        if (t === 'dark' || (!t && prefersDark)) {
+          document.body.classList.add('dark-mode');
+        }
+      } catch (e) { /* ignore */ }
+    })();
+  </script>
   <header>
     <h1 aria-label="App title">Vocal Pitch Detector</h1>
     <div class="toolbar" role="toolbar" aria-label="Display controls">
@@ -527,6 +549,11 @@
   darkToggle.setAttribute('aria-label', darkToggle.title);
     }
     updateThemeToggleLabel();
+    // GA4: set user property for current theme on load
+    (function setInitialThemeUserProp(){
+      const theme = document.body.classList.contains('dark-mode') ? 'dark' : 'light';
+      if (typeof gtag === 'function') { try { gtag('set', 'user_properties', { theme }); } catch {} }
+    })();
     darkToggle.addEventListener('click', () => {
       const isDark = document.body.classList.toggle('dark-mode');
   // Keep aria-pressed for accessibility state, but it no longer affects styling
@@ -537,6 +564,8 @@
   drawPianoGridLines();
   // GA4: theme changed
   if (typeof gtag === 'function') { try { gtag('event', 'theme_changed', { theme: isDark ? 'dark' : 'light' }); } catch {} }
+  // GA4: also update user property for theme so reports can segment by user
+  if (typeof gtag === 'function') { try { gtag('set', 'user_properties', { theme: isDark ? 'dark' : 'light' }); } catch {} }
   // Close the settings menu after action
   closeSettingsMenu();
     });
