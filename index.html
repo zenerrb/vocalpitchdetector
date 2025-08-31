@@ -391,7 +391,8 @@
       z-index: 80;
       animation: fadeSlide var(--transition-fast);
     }
-    .settings-menu button { width: 100%; justify-content: flex-start; }
+  .settings-menu button { width: 100%; justify-content: flex-start; text-align: left; }
+  .settings-menu a.btn { width: 100%; justify-content: flex-start; text-align: left; }
   .settings-menu[hidden] { display: none !important; }
   /* When near right edge, flip alignment */
   .settings-menu.align-right { left: auto; right: 0; }
@@ -457,6 +458,7 @@
         <div id="settingsMenu" class="settings-menu" role="menu" hidden>
           <button id="darkToggle" class="btn-secondary" type="button" aria-pressed="false" title="Toggle dark mode" role="menuitem">Dark Mode</button>
           <button id="fsToggle" class="btn-secondary" type="button" aria-pressed="false" title="Enter fullscreen" aria-label="Enter fullscreen" role="menuitem">Fullscreen Mode</button>
+          <a id="repoLink" class="btn btn-secondary" href="https://github.com/zenerrb/vocalpitchdetector" target="_blank" rel="noopener noreferrer" title="Open source code on GitHub" aria-label="Open the source code repository on GitHub" role="menuitem">Source Code (GitHub)</a>
         </div>
       </div>
     </div>
@@ -482,6 +484,7 @@
     const settingsMenu = document.getElementById('settingsMenu');
     const darkToggle = document.getElementById('darkToggle');
     const fsToggle = document.getElementById('fsToggle');
+  const repoLink = document.getElementById('repoLink');
     function openSettingsMenu() {
       if (!settingsMenu.hidden) return;
       settingsMenu.hidden = false;
@@ -512,7 +515,7 @@
       if (e.key === 'Escape') { closeSettingsMenu(); settingsTrigger.focus(); }
       // basic up/down focus cycling
       if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
-        const focusable = Array.from(settingsMenu.querySelectorAll('button'));
+        const focusable = Array.from(settingsMenu.querySelectorAll('button, a.btn'));
         if (!focusable.length) return;
         const dir = e.key === 'ArrowDown' ? 1 : -1;
         const idx = focusable.indexOf(document.activeElement);
@@ -1023,6 +1026,10 @@
       });
       stopBtn.addEventListener('click', () => {
         try { gtag('event', 'stop_clicked', { event_category: 'engagement' }); } catch {}
+      });
+      repoLink?.addEventListener('click', () => {
+        try { gtag('event', 'repo_clicked', { event_category: 'navigation' }); } catch {}
+        closeSettingsMenu();
       });
     }
   </script>
