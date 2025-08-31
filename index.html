@@ -953,36 +953,15 @@
         dataArray = new Float32Array(analyser.fftSize);
         source.connect(analyser);
         stopBtn.disabled = false;
-        // Sticky note (debounce) variables
-        const STICKY_MS = 100; // required consecutive ms for a note to become active
-        let candidateNote = null;
-        let candidateStartTime = 0;
+        // Immediate note highlight (sticky disabled)
         function update() {
           if (!listening) return;
           analyser.getFloatTimeDomainData(dataArray);
             const freq = autoCorrelate(dataArray, audioContext.sampleRate);
             const detectedNote = freqToNote(freq);
             const now = performance.now();
-
-            // If detected note is already the active (highlighted) note, clear any candidate
-            if (detectedNote === currentActiveNote) {
-              candidateNote = null;
-              candidateStartTime = 0;
-            } else {
-              // New or continuing candidate note path
-              if (candidateNote !== detectedNote) {
-                // Start tracking a new candidate note
-                candidateNote = detectedNote;
-                candidateStartTime = now;
-              } else {
-                // Same candidate persists – check duration
-                if (now - candidateStartTime >= STICKY_MS) {
-                  // Promote candidate to active
-                  highlightPiano(candidateNote);
-                  candidateNote = null;
-                  candidateStartTime = 0;
-                }
-              }
+            if (detectedNote !== currentActiveNote) {
+              highlightPiano(detectedNote);
             }
             // Continuous emission for piano overlay using RAW frequency (no snapping)
             const nowSec = now / 1000;

@@ -7,21 +7,23 @@ Demo: https://zenerrb.github.io/vocalpitchdetector/
 ### Current Features
 * Real‑time pitch detection (autocorrelation) in the browser – no backend.
 * Full 88‑key virtual piano with smooth horizontal scrolling.
-* Sticky note highlighting (short debounce reduces flicker on noisy input).
+* Immediate note highlighting (no debounce/sticky delay).
 * Raw frequency dot overlay (log‑interpolated between semitones) for micro‑intonation visualization.
 * Dark / light theme toggle with preference persistence.
+* Fullscreen toggle option.
 * Responsive layout; touch + mouse scroll friendly.
 
 ### Use It
 1. Open `index.html` locally (or visit the demo URL).
 2. Press Start and allow microphone access.
-3. Sing / play – the active key lights; dots show recent pitch history.
+3. Sing / play – the active key lights immediately; dots show recent pitch history.
 4. Press Stop to release the mic.
+5. Optional: open the Settings (gear) to toggle dark mode or fullscreen.
 
 ### Tech Notes
 * Plain HTML/CSS/JS (no build step, no dependencies).
 * Autocorrelation is intentionally simple (good for monophonic voice); swap in YIN/AMDF/etc. if you need more robustness.
-* Overlay uses requestAnimationFrame; emission capped (~50 Hz) to balance smoothness and CPU.
+* Overlay uses requestAnimationFrame; dot emission capped (~50 Hz) to balance smoothness and CPU.
 
 ### File
 * `index.html` – entire app.
