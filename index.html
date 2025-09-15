@@ -470,6 +470,16 @@
   <div id="piano" role="group" aria-label="Virtual piano keyboard"></div>
       </div>
     </section>
+    <section class="panel" id="debug-panel" aria-label="Pitch debug info" style="display:none;">
+      <div style="display:flex; gap:1.25rem; flex-wrap:wrap; font-size:.8rem; line-height:1.3;">
+        <div><strong>Raw Freq:</strong> <span id="dbg-raw">--</span></div>
+        <div><strong>Smooth Freq:</strong> <span id="dbg-smooth">--</span></div>
+        <div><strong>Raw Note:</strong> <span id="dbg-raw-note">--</span></div>
+        <div><strong>Stable Note:</strong> <span id="dbg-stable">--</span></div>
+        <div><strong>Confidence:</strong> <span id="dbg-conf">--</span></div>
+        <div><strong>Δ (cents):</strong> <span id="dbg-cents">--</span></div>
+      </div>
+    </section>
   <!-- Recent pitch timeline section removed -->
     <footer class="helper-text" style="text-align:center; margin-top:auto; padding-bottom:2rem;">
       <span>Press Start to begin. Press Stop to end.</span>
@@ -528,7 +538,8 @@
     settingsTrigger.addEventListener('click', () => {
       if (settingsMenu.hidden) openSettingsMenu(); else closeSettingsMenu();
     });
-    let audioContext, analyser, dataArray, source, stream, listening = false, animationId;
+  let audioContext, analyser, dataArray, source, stream, listening = false, animationId;
+  let pitchNode; // AudioWorkletNode
   let currentActiveNote = '--';
   // Removed lastRawFreq (was unused beyond assignment)
   let lastPianoDotEmit = 0; // throttle for piano overlay
@@ -908,35 +919,114 @@
     }
     drawPianoTimelineOverlay();
 
-    function autoCorrelate(buf, sampleRate) {
-      // Simple autocorrelation
-      let SIZE = buf.length;
-      let rms = 0;
-      for (let i = 0; i < SIZE; i++) rms += buf[i] * buf[i];
-      rms = Math.sqrt(rms / SIZE);
-      if (rms < 0.01) return null;
-      let r1 = 0, r2 = SIZE - 1, thres = 0.2;
-      for (let i = 0; i < SIZE / 2; i++) {
-        if (Math.abs(buf[i]) < thres) { r1 = i; break; }
+    // --- Pitch detection (AudioWorklet MPM) + fallback ---
+    const pitchHistoryFreqs = [];
+    function median(arr) { if (!arr.length) return null; const s = [...arr].sort((a,b)=>a-b); return s[Math.floor(s.length/2)]; }
+    function smoothFreq(f) {
+      if (!f) return null;
+      pitchHistoryFreqs.push(f);
+      if (pitchHistoryFreqs.length > 5) pitchHistoryFreqs.shift();
+      return median(pitchHistoryFreqs);
+    }
+    let lastStableNote = '--';
+    let pendingNote = null; let pendingFrames = 0;
+    function hysteresisNote(note) {
+      if (!note || note === '--') return lastStableNote;
+      lastStableNote = note; // immediate adopt for reliability
+      return lastStableNote;
+    }
+    function centsOffset(freq) {
+      if (!freq) return null; const A4=440; const n = 12 * Math.log2(freq / A4); const nearest = Math.round(n); return (n - nearest) * 100; }
+    let workletSupported = !!window.AudioWorkletNode;
+    async function setupPitchWorklet() {
+      if (!workletSupported) return false;
+      try {
+        if (!audioContext.audioWorklet) return false;
+        await audioContext.audioWorklet.addModule('pitch-worklet.js');
+        pitchNode = new AudioWorkletNode(audioContext, 'pitch-processor');
+  const silentGain = audioContext.createGain();
+  silentGain.gain.value = 0; // keep processing graph alive without audible output
+  source.connect(pitchNode).connect(silentGain).connect(audioContext.destination);
+  window.__vpdSilentGain = silentGain;
+        let lastMsgTime = performance.now();
+        const dbgRaw = document.getElementById('dbg-raw');
+        const dbgSmooth = document.getElementById('dbg-smooth');
+        const dbgRawNote = document.getElementById('dbg-raw-note');
+        const dbgStable = document.getElementById('dbg-stable');
+        const dbgConf = document.getElementById('dbg-conf');
+        const dbgCents = document.getElementById('dbg-cents');
+        pitchNode.port.onmessage = (e) => {
+          const msg = e.data; if (!msg || msg.type !== 'pitch') return;
+          const { freq, confidence } = msg;
+          if (!listening) return;
+          lastMsgTime = performance.now();
+          if (!freq) return; // allow low confidence to still attempt highlight
+          const rawNote = freqToNote(freq);
+          const smoothed = smoothFreq(freq);
+          // Decide note to feed hysteresis: prefer raw center note to reduce drift but use smoothing to reduce flicker.
+          const stableNote = hysteresisNote(rawNote);
+          highlightPiano(stableNote);
+          const nowSec = performance.now()/1000;
+          const overlayFreq = smoothed || freq;
+          if (overlayFreq && (nowSec - lastPianoDotEmit) >= 0.02) {
+            pianoHistory.push({ note: stableNote, freq: overlayFreq, time: nowSec });
+            lastPianoDotEmit = nowSec;
+          }
+          // Debug UI update (hidden unless user shows panel)
+          if (dbgRaw) {
+            dbgRaw.textContent = freq.toFixed(2);
+            dbgSmooth.textContent = smoothed ? smoothed.toFixed(2) : '--';
+            dbgRawNote.textContent = rawNote;
+            dbgStable.textContent = stableNote;
+            dbgConf.textContent = confidence.toFixed(2);
+            const offset = centsOffset(freq);
+            dbgCents.textContent = offset ? offset.toFixed(1) : '--';
+          }
+        };
+        // Configure min/max freq based on typical vocal range (can expose UI later)
+        pitchNode.port.postMessage({ type: 'config', minFreq: 70, maxFreq: 1000 });
+        // Fallback watchdog: if no messages arrive in 1s, assume failure & signal false
+        const watchdogInterval = setInterval(() => {
+          if (!listening) { clearInterval(watchdogInterval); return; }
+          if (performance.now() - lastMsgTime > 1200) {
+            console.warn('Pitch worklet silent, reverting to fallback');
+            clearInterval(watchdogInterval);
+            // Trigger external detection to start fallback
+            if (!animationId) {
+              startFallbackLoop();
+            }
+          }
+        }, 600);
+        return true;
+      } catch (err) {
+        console.warn('Pitch worklet setup failed, using fallback', err);
+        return false;
       }
-      for (let i = 1; i < SIZE / 2; i++) {
-        if (Math.abs(buf[SIZE - i]) < thres) { r2 = SIZE - i; break; }
+    }
+    // Fallback simple improved autocorrelation (window + parabolic)
+    function fallbackPitch(buf, sampleRate) {
+      const N = buf.length;
+      // Hann + DC removal
+      let mean=0; for (let i=0;i<N;i++) mean += buf[i]; mean/=N;
+      for (let i=0;i<N;i++){ const w=0.5*(1-Math.cos(2*Math.PI*i/(N-1))); buf[i]=(buf[i]-mean)*w; }
+      let rms=0; for (let i=0;i<N;i++) rms+=buf[i]*buf[i]; rms=Math.sqrt(rms/N); if (rms<0.005) return {freq:null,confidence:0};
+      const maxLag = Math.min(N-1, Math.floor(sampleRate/70));
+      const minLag = Math.floor(sampleRate/1000);
+      let bestLag=-1, bestCorr=0;
+      for (let lag=minLag; lag<=maxLag; lag++) {
+        let corr=0; for (let i=0;i+lag<N;i++) corr += buf[i]*buf[i+lag];
+        if (corr>bestCorr){ bestCorr=corr; bestLag=lag; }
       }
-      buf = buf.slice(r1, r2);
-      SIZE = buf.length;
-      let c = new Array(SIZE).fill(0);
-      for (let i = 0; i < SIZE; i++) {
-        for (let j = 0; j < SIZE - i; j++) {
-          c[i] = c[i] + buf[j] * buf[j + i];
-        }
-      }
-      let d = 0; while (c[d] > c[d + 1]) d++;
-      let maxval = -1, maxpos = -1;
-      for (let i = d; i < SIZE; i++) {
-        if (c[i] > maxval) { maxval = c[i]; maxpos = i; }
-      }
-      let T0 = maxpos;
-      return sampleRate / T0;
+      if (bestLag<0) return {freq:null,confidence:0};
+      // Parabolic refine
+      const c0 = (bestLag>1)? (()=>{let s=0; for(let i=0;i+bestLag-1<N;i++) s+=buf[i]*buf[i+bestLag-1]; return s;})():bestCorr;
+      const c1 = bestCorr;
+      const c2 = (bestLag+1<N)? (()=>{let s=0; for(let i=0;i+bestLag+1<N;i++) s+=buf[i]*buf[i+bestLag+1]; return s;})():bestCorr;
+      const denom = (2*c1 - c0 - c2);
+      const shift = denom!==0 ? 0.5*(c0 - c2)/denom : 0;
+      const refined = bestLag + shift;
+      const freq = sampleRate / refined;
+      return { freq, confidence: Math.min(1, (bestCorr / (N/2)) * (rms/0.1)) };
     }
 
     async function startListening() {
@@ -951,27 +1041,15 @@
         analyser = audioContext.createAnalyser();
         analyser.fftSize = 2048;
         dataArray = new Float32Array(analyser.fftSize);
+        // Keep analyser for fallback & potential visualization; connect it in parallel (not to destination to avoid echo)
         source.connect(analyser);
+        let workletOk = await setupPitchWorklet();
         stopBtn.disabled = false;
-        // Immediate note highlight (sticky disabled)
-        function update() {
-          if (!listening) return;
-          analyser.getFloatTimeDomainData(dataArray);
-            const freq = autoCorrelate(dataArray, audioContext.sampleRate);
-            const detectedNote = freqToNote(freq);
-            const now = performance.now();
-            if (detectedNote !== currentActiveNote) {
-              highlightPiano(detectedNote);
-            }
-            // Continuous emission for piano overlay using RAW frequency (no snapping)
-            const nowSec = now / 1000;
-            if (freq && (nowSec - lastPianoDotEmit) >= 0.02) { // ~50 FPS max emission
-              pianoHistory.push({ note: detectedNote, freq, time: nowSec });
-              lastPianoDotEmit = nowSec;
-            }
-          animationId = requestAnimationFrame(update);
+        if (!workletOk) startFallbackLoop();
+        // Auto-show debug panel if holding Shift at start
+        if (window.event && window.event.shiftKey) {
+          document.getElementById('debug-panel').style.display='block';
         }
-        update();
       } catch (e) {
         console.error('Microphone access failed', e);
         listening = false;
@@ -979,11 +1057,35 @@
         stopBtn.disabled = true;
       }
     }
+    function startFallbackLoop() {
+      function updateFallback() {
+        if (!listening) return;
+        analyser.getFloatTimeDomainData(dataArray);
+        const { freq, confidence } = fallbackPitch(dataArray.slice(), audioContext.sampleRate);
+        if (freq) {
+          const sf = smoothFreq(freq);
+          if (sf) {
+            const note = freqToNote(sf);
+            const stable = hysteresisNote(note, confidence);
+            if (stable !== currentActiveNote) highlightPiano(stable);
+            const nowSec = performance.now()/1000;
+            if (sf && (nowSec - lastPianoDotEmit) >= 0.02) {
+              pianoHistory.push({ note: stable, freq: sf, time: nowSec });
+              lastPianoDotEmit = nowSec;
+            }
+          }
+        }
+        animationId = requestAnimationFrame(updateFallback);
+      }
+      updateFallback();
+    }
 
     function stopListening() {
       if (!listening) return;
       listening = false;
       if (animationId) cancelAnimationFrame(animationId);
+  if (pitchNode) { try { pitchNode.port.onmessage = null; pitchNode.disconnect(); } catch {} pitchNode = null; }
+  if (window.__vpdSilentGain) { try { window.__vpdSilentGain.disconnect(); } catch {}; window.__vpdSilentGain = null; }
       if (audioContext) { audioContext.close(); audioContext = null; }
       if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; }
       highlightPiano('--');
